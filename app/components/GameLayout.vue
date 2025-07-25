@@ -38,6 +38,20 @@
             element.name
           }}</span>
         </div>
+        <NuxtLink
+          as="button"
+          class="absolute top-4 right-6 z-50 w-fit cursor-pointer text-muted-foreground hover:text-primary"
+          to="https://github.com/alexander-gekov"
+          target="_blank">
+          <LucideGithub />
+        </NuxtLink>
+        <NuxtLink
+          as="button"
+          class="absolute top-14 right-6 z-50 w-fit cursor-pointer text-muted-foreground hover:text-primary"
+          to="https://x.com/AlexanderGekov"
+          target="_blank">
+          <LucideTwitter />
+        </NuxtLink>
 
         <TooltipProvider>
           <Tooltip>
@@ -73,7 +87,7 @@
                   class="text-sm"
                   v-model="newElementPrompt"
                   type="text"
-                  placeholder="Enter element name"
+                  placeholder="A dinosaur with wings..."
                   @keyup.enter="generateElement" />
                 <Button @click="generateElement" variant="default">
                   <LucidePlus class="w-4 h-4" />
@@ -151,6 +165,8 @@ import {
   LucidePlus,
   LucideLoaderPinwheel,
   LucideLoader2,
+  LucideGithub,
+  LucideTwitter,
 } from "lucide-vue-next";
 import { Card, CardContent } from "#components";
 
