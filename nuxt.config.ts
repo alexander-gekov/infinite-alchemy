@@ -24,6 +24,10 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     togetheraiApiKey: process.env.TOGETHER_AI_API_KEY,
+    public: {
+      upstashUrl: process.env.UPSTASH_REDIS_REST_URL,
+      upstashReadOnlyToken: process.env.UPSTASH_REDIS_REST_READ_ONLY_TOKEN,
+    },
     upstashUrl: process.env.UPSTASH_REDIS_REST_URL,
     upstashToken: process.env.UPSTASH_REDIS_REST_TOKEN,
   },

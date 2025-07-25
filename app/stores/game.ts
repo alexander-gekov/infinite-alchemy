@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { toast } from "vue-sonner";
+import { Redis } from "@upstash/redis";
 
 export interface Element {
   id: string;
@@ -24,7 +25,11 @@ export interface StoredElement {
 }
 
 export const useGameStore = defineStore("game", () => {
-  const redisUrl = useRuntimeConfig().upstashUrl;
+  const redisReadOnly = new Redis({
+    url: useRuntimeConfig().public.upstashUrl,
+    token: useRuntimeConfig().public.upstashReadOnlyToken,
+  });
+
   const isPlaying = ref(false);
   const availableElementsSet = ref(new Set<Element>());
   const gameStarted = useCookie("gameStarted", {
@@ -55,7 +60,7 @@ export const useGameStore = defineStore("game", () => {
     const storedElements = availableElementsStorage.value || [];
     for (const element of storedElements) {
       try {
-        const img = await $fetch(`${redisUrl}/get/${element.id}`);
+        const img = await redisReadOnly.get(element.id);
         availableElementsSet.value.add({
           ...element,
           img: typeof img === "string" ? img : "",
@@ -68,7 +73,7 @@ export const useGameStore = defineStore("game", () => {
     const storedCanvasElements = canvasElementsStorage.value || [];
     const canvasElementsWithImages = await Promise.all(
       storedCanvasElements.map(async (el) => {
-        const img = await $fetch(`${redisUrl}/get/${el.id}`);
+        const img = await redisReadOnly.get(el.id);
         return {
           ...el,
           img: typeof img === "string" ? img : "",
