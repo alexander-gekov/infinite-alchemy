@@ -1,11 +1,13 @@
 import Together from "together-ai";
 import { ImageDataB64 } from "together-ai/resources";
 import { Ratelimit } from "@upstash/ratelimit"; // for deno: see above
-import { redis } from "~/lib/redis";
+import { Redis } from "@upstash/redis";
 
 const config = useRuntimeConfig();
 
 export default defineEventHandler(async (event) => {
+  const redis = Redis.fromEnv();
+
   // Create a new ratelimiter, that allows 10 requests per 10 seconds
   const ratelimit = new Ratelimit({
     redis: redis,
