@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { toast } from "vue-sonner";
-import { redisReadOnly } from "~/lib/redis";
+import { Redis } from "@upstash/redis";
 
 export interface Element {
   id: string;
@@ -23,6 +23,11 @@ export interface StoredElement {
     y: number;
   };
 }
+
+const redisReadOnly = new Redis({
+  url: "https://coherent-bunny-15316.upstash.io",
+  token: "AjvUAAIgcDGlX8qJE2A82xsfh9cqfGQhI60KBmfpZkRKioUfcVV3AA",
+});
 
 export const useGameStore = defineStore("game", () => {
   const isPlaying = ref(false);
