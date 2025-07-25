@@ -9,7 +9,8 @@ export default defineEventHandler(async (event) => {
   // Create a new ratelimiter, that allows 10 requests per 10 seconds
   const ratelimit = new Ratelimit({
     redis: Redis.fromEnv(),
-    limiter: Ratelimit.tokenBucket(5, "30 s", 20),
+    limiter: Ratelimit.tokenBucket(5, "1 m", 10),
+    timeout: 5000,
     analytics: true,
     /**
      * Optional prefix for the keys used in redis. This is useful if you want to share a redis
@@ -83,7 +84,7 @@ export default defineEventHandler(async (event) => {
     description = output.description;
 
     const image = await together.images.create({
-      prompt: `shiny 3D illustration of ${name}, minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
+      prompt: `shiny 3D illustration of ${name} (${description}), minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
       model: "black-forest-labs/FLUX.1-schnell",
       steps: 2,
       response_format: "base64",

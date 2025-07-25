@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
+import { toast } from "vue-sonner";
 
 export interface Element {
   id: string;
@@ -41,19 +42,27 @@ export const useGameStore = defineStore("game", () => {
     canvasElements.value = canvasElementsStorage.value || [];
 
     if (!gameStarted.value) {
-      const promises = Array.from({ length: 2 }, () =>
-        $fetch<Omit<Element, "position">>("api/elements/random")
-      );
+      try {
+        const promises = Array.from({ length: 2 }, () =>
+          $fetch<Omit<Element, "position">>("api/elements/random", {
+            timeout: 5000,
+          })
+        );
 
-      const responses = await Promise.all(promises);
-      const newElements = responses.map((response) => ({
-        ...response,
-        position: { x: 0, y: 0 },
-      })) as Element[];
+        const responses = await Promise.all(promises);
+        const newElements = responses.map((response) => ({
+          ...response,
+          position: { x: 0, y: 0 },
+        })) as Element[];
 
-      // Add new elements to the Set
-      newElements.forEach((element) => availableElementsSet.value.add(element));
-      gameStarted.value = true;
+        // Add new elements to the Set
+        newElements.forEach((element) =>
+          availableElementsSet.value.add(element)
+        );
+        gameStarted.value = true;
+      } catch (error) {
+        toast((error as Error).message);
+      }
     }
   };
 

@@ -1,10 +1,10 @@
 <template>
   <div
-    class="h-screen flex flex-col gap-4 items-center justify-center bg-gray-100">
-    <div class="flex flex-col items-center justify-center gap-2">
-      <img :src="logo" alt="Infinite Alchemy" class="w-36 h-36" />
+    class="h-screen flex flex-col gap-4 items-center justify-center bg-gray-100 text-wrap flex-wrap">
+    <div class="flex flex-col items-center justify-center md:px-0 gap-2">
+      <img :src="logo" alt="Infinite Alchemy" class="w-36 h-36 ml-4" />
       <h1 class="text-2xl font-bold">Infinite Alchemy</h1>
-      <p class="text-sm text-gray-500">
+      <p class="text-sm text-center text-gray-500">
         A game about creating infinite combinations of elements using AI.
       </p>
     </div>

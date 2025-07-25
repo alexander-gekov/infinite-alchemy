@@ -9,7 +9,7 @@ export default defineEventHandler(async () => {
   // Create a new ratelimiter, that allows 10 requests per 10 seconds
   const ratelimit = new Ratelimit({
     redis: Redis.fromEnv(),
-    limiter: Ratelimit.tokenBucket(5, "30 s", 20),
+    limiter: Ratelimit.tokenBucket(5, "5 m", 10),
     analytics: true,
     /**
      * Optional prefix for the keys used in redis. This is useful if you want to share a redis
