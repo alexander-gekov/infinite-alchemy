@@ -1,11 +1,12 @@
 import { defineStore } from "pinia";
+import { useStorage } from "@vueuse/core";
 
 interface Element {
   id: string;
   name: string;
   description: string;
   icon: string;
-  img: string; // Add img property
+  img: string;
   position: {
     x: number;
     y: number;
@@ -14,22 +15,15 @@ interface Element {
 
 export const useGameStore = defineStore("game", () => {
   const isPlaying = ref(false);
-  const availableElements = ref<Element[]>([] as Element[]);
-  const canvasElements = ref<Element[]>([] as Element[]);
+  const availableElements = ref<Element[]>([]);
+  const storage = useStorage("canvasElements", [] as Element[]);
+  const canvasElements = ref<Element[]>(storage.value);
 
   const startGame = async () => {
     isPlaying.value = true;
+    // Load canvas elements from storage
+    canvasElements.value = storage.value || [];
 
-    // const promises = Array.from({ length: 4 }, () =>
-    //   $fetch<Omit<Element, "position">>("/api/elements/random")
-    // );
-
-    // const responses = await Promise.all(promises);
-    // availableElements.value = responses.map((response) => ({
-    //   ...response,
-    //   img: response.icon, // Use icon as img for now
-    //   position: { x: 0, y: 0 },
-    // })) as Element[];
     availableElements.value = [
       {
         id: "1",
@@ -51,21 +45,28 @@ export const useGameStore = defineStore("game", () => {
   };
 
   const addCanvasElement = (element: Element) => {
-    canvasElements.value.push({
-      ...element,
-      position: element.position || { x: 0, y: 0 },
-    });
+    canvasElements.value = [
+      ...canvasElements.value,
+      {
+        ...element,
+        position: element.position || { x: 0, y: 0 },
+      },
+    ];
+    storage.value = canvasElements.value;
   };
 
   const updateElementPosition = (
     elementId: string,
     position: { x: number; y: number }
   ) => {
-    const element = canvasElements.value.find(
+    const elementIndex = canvasElements.value.findIndex(
       (e: Element) => e.id === elementId
     );
-    if (element) {
-      element.position = position;
+    if (elementIndex !== -1) {
+      canvasElements.value = canvasElements.value.map((e, index) =>
+        index === elementIndex ? { ...e, position } : e
+      );
+      storage.value = canvasElements.value;
     }
   };
 
@@ -73,10 +74,12 @@ export const useGameStore = defineStore("game", () => {
     canvasElements.value = canvasElements.value.filter(
       (e) => e.id !== elementId
     );
+    storage.value = canvasElements.value;
   };
 
   const clearCanvas = () => {
     canvasElements.value = [];
+    storage.value = [];
   };
 
   return {

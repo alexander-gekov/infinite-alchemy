@@ -89,6 +89,10 @@ const draggedElement = ref<any>(null);
 const dragOffset = ref({ x: 0, y: 0 });
 const elementBeingDraggedOver = ref<any>(null);
 
+onMounted(() => {
+  console.log("GameLayout mounted, canvas elements:", gameStore.canvasElements);
+});
+
 const createDragPreview = (element: HTMLElement) => {
   const clone = element.cloneNode(true) as HTMLElement;
   clone.style.transform = "translateY(-9999px)";
