@@ -1,8 +1,10 @@
 import { Redis } from "@upstash/redis";
 
+const config = useRuntimeConfig();
+
 export const redis = new Redis({
   url: "https://coherent-bunny-15316.upstash.io",
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  token: config.upstashToken as string,
 });
 
 export const redisReadOnly = new Redis({
