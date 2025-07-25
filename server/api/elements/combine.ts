@@ -1,9 +1,11 @@
 import Together from "together-ai";
-import { ImageDataB64, ImageDataURL } from "together-ai/resources";
+import { ImageDataB64 } from "together-ai/resources";
 
 const config = useRuntimeConfig();
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  const { prompt } = await readBody(event);
+
   const together = new Together({
     apiKey: config.togetheraiApiKey,
   });
@@ -24,20 +26,18 @@ export default defineEventHandler(async () => {
   };
 
   try {
+    let name = prompt;
+    let description = "";
     const extract = await together.chat.completions.create({
       messages: [
         {
           role: "system",
-          content:
-            "Generate a random common noun (Refer to general categories of people, places, or things) or a random abstract noun (Refer to ideas, concepts, or qualities that cannot be touched or seen (e.g., love, freedom, happiness)) and description and return it in JSON format. The name should be a singular common noun in lowercase without punctuation.",
+          content: `Generate a common or abstract noun and description based on the prompt: ${prompt}`,
         },
       ],
-      model: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+      model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       response_format: { type: "json_object", schema: elementSchema },
       temperature: 1.2,
-      seed: Math.floor(Math.random() * 1000000),
-      frequency_penalty: 1.0,
-      presence_penalty: 1.0,
     });
 
     let output;
@@ -52,20 +52,25 @@ export default defineEventHandler(async () => {
       throw new Error("Failed to generate element details");
     }
 
+    name = output.name;
+    description = output.description;
+
     const image = await together.images.create({
-      prompt: `Claymorphic soft 3D illustration of ${output.name}, minimalistic design, smooth surfaces, pastel colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
+      prompt: `shiny 3D illustration of ${name}, minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
       model: "black-forest-labs/FLUX.1-schnell",
-      steps: 1,
+      steps: 2,
       response_format: "base64",
       disable_safety_checker: true,
       seed: 123,
     });
 
+    const imageBase64 = (image.data[0] as ImageDataB64).b64_json;
+
     return {
-      id: output.name.toLowerCase().replace(/\s+/g, "-"),
-      name: output.name,
-      description: output.description,
-      img: `data:image/png;base64,${(image.data[0] as ImageDataB64).b64_json}`,
+      id: name.toLowerCase().replace(/\s+/g, "-"),
+      name: name,
+      description: description,
+      img: `data:image/png;base64,${imageBase64}`,
     };
   } catch (error) {
     console.error("Error generating element:", error);

@@ -1,5 +1,5 @@
 <template>
-  <StartScreen v-if="!gameStore.isPlaying" @play="startGame" />
+  <StartScreen v-if="!isPlaying" @play="startGame" />
   <GameLayout v-else />
 </template>
 
@@ -7,6 +7,7 @@
 import { useGameStore } from "~/stores/game";
 
 const gameStore = useGameStore();
+const { isPlaying } = storeToRefs(gameStore);
 
 const startGame = async () => {
   await gameStore.startGame();

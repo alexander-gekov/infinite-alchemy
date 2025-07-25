@@ -1,14 +1,21 @@
 <template>
   <div class="flex h-screen">
-    <div class="flex-1 bg-background/50 relative">
+    <div
+      v-if="isCombining"
+      class="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg p-4 text-center">
+        <LucideLoader2 class="w-10 h-10 mx-auto mb-2 animate-spin" />
+        <p class="text-sm">Combining elements...</p>
+      </div>
+    </div>
+    <div class="flex-1 bg-white relative min-w-[40%] shrink-0">
       <div
         ref="canvas"
-        class="absolute inset-0 bg-[url('/paper.png')] bg-repeat"
+        class="absolute inset-0 bg-repeat"
         @dragover.prevent
         @drop="handleDrop">
-        <div class="absolute inset-0 bg-background/50 backdrop-blur-[1px]" />
         <div
-          v-for="element in gameStore.canvasElements"
+          v-for="element in canvasElements"
           :key="element.id"
           class="absolute cursor-move z-10"
           :style="{
@@ -20,9 +27,9 @@
           @dragend="handleDragEnd($event, element)"
           @dblclick="handleDuplicate(element)">
           <img
-            :src="element.icon"
+            :src="element.img"
             :alt="element.name"
-            class="w-16 h-16 object-contain transition-opacity duration-200"
+            class="w-22 h-22 rounded-full transition-opacity duration-200"
             :class="{
               'opacity-30': elementBeingDraggedOver?.id === element.id,
             }"
@@ -44,35 +51,93 @@
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger class="absolute bottom-18 right-6 z-50" as-child
+              ><LucidePower
+                class="w-fit cursor-pointer text-muted-foreground hover:text-primary"
+                @click="gameStore.resetGame"
+            /></TooltipTrigger>
+            <TooltipContent>
+              <p>Reset game</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <!-- Floating Generate UI -->
+        <div class="absolute bottom-[3%] left-1/2 -translate-x-1/2 w-96 z-40">
+          <Card>
+            <CardContent>
+              <div class="flex gap-2">
+                <Input
+                  class="text-sm"
+                  v-model="newElementPrompt"
+                  type="text"
+                  placeholder="Enter element name"
+                  @keyup.enter="generateElement" />
+                <Button @click="generateElement" variant="default">
+                  <LucidePlus class="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
 
-    <div class="w-64 bg-background border-l border-gray-200 overflow-y-auto">
-      <div class="p-4">
-        <h2 class="text-lg font-bold">Available Elements</h2>
-        <div class="grid gap-2">
+    <div class="w-8 bg-background flex flex-col items-center py-2">
+      <button
+        v-for="letter in alphabet"
+        :key="letter"
+        class="w-6 h-6 text-xs flex items-center justify-center rounded-sm mb-1 font-medium"
+        :class="{
+          'text-primary cursor-pointer hover:bg-gray-100':
+            hasElementsStartingWith(letter),
+          'text-gray-300': !hasElementsStartingWith(letter),
+        }"
+        @click="scrollToLetter(letter)"
+        :disabled="!hasElementsStartingWith(letter)">
+        {{ letter }}
+      </button>
+    </div>
+
+    <div class="w-64 bg-background border-l border-gray-200 flex flex-col">
+      <div class="p-4 flex-1 overflow-y-auto" ref="elementsContainer">
+        <h2 class="text-md font-bold">
+          Available Elements ({{ availableElements.length }})
+        </h2>
+        <div class="grid gap-2 pt-2">
           <div
-            v-if="gameStore.availableElements.length === 0"
+            v-if="availableElements.length === 0"
             class="flex flex-col gap-2">
-            <Skeleton v-for="i in 4" :key="i" class="w-full h-12" />
+            <Skeleton v-for="i in 2" :key="i" class="w-full h-12" />
             <p class="text-sm text-muted-foreground">
               Loading base elements...
             </p>
           </div>
-          <div
-            v-for="element in gameStore.availableElements"
-            :key="element.id"
-            class="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-move"
-            draggable="true"
-            @dragstart="handleSidebarDragStart($event, element, true)"
-            @dragend="handleSidebarDragEnd($event)">
-            <img
-              :src="element.icon"
-              :alt="element.name"
-              class="w-10 h-10 object-contain"
-              draggable="false" />
-            <span class="text-sm text-gray-600">{{ element.name }}</span>
-          </div>
+          <template v-for="letter in alphabet" :key="letter">
+            <div
+              v-if="getElementsByLetter(letter).length > 0"
+              :id="'letter-' + letter">
+              <div class="text-xs font-semibold text-gray-500 py-1">
+                {{ letter }}
+              </div>
+              <div
+                v-for="element in getElementsByLetter(letter)"
+                :key="element.id"
+                class="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-move"
+                draggable="true"
+                @dragstart="handleSidebarDragStart($event, element, true)"
+                @dragend="handleSidebarDragEnd($event)">
+                <img
+                  :src="element.img"
+                  :alt="element.name"
+                  class="w-12 h-12 rounded-full"
+                  draggable="false" />
+                <span class="text-sm text-gray-600">{{ element.name }}</span>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -80,18 +145,62 @@
 </template>
 
 <script setup lang="ts">
-import { LucideRecycle } from "lucide-vue-next";
-import { useGameStore } from "~/stores/game";
+import {
+  LucidePower,
+  LucideRecycle,
+  LucidePlus,
+  LucideLoaderPinwheel,
+  LucideLoader2,
+} from "lucide-vue-next";
+import { Card, CardContent } from "#components";
+
+import { useGameStore, type Element } from "~/stores/game";
 
 const gameStore = useGameStore();
+const { availableElements, canvasElements } = storeToRefs(gameStore);
+const {
+  addAvailableElement,
+  addCanvasElement,
+  removeCanvasElement,
+  updateElementPosition,
+} = gameStore;
 const canvas = ref<HTMLElement | null>(null);
+const elementsContainer = ref<HTMLElement | null>(null);
 const draggedElement = ref<any>(null);
 const dragOffset = ref({ x: 0, y: 0 });
 const elementBeingDraggedOver = ref<any>(null);
+const newElementPrompt = ref("");
+const isCombining = ref(false);
 
-onMounted(() => {
-  console.log("GameLayout mounted, canvas elements:", gameStore.canvasElements);
-});
+const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+const getElementsByLetter = (letter: string) => {
+  return availableElements.value.filter((element) =>
+    element.name.toUpperCase().startsWith(letter)
+  );
+};
+
+const hasElementsStartingWith = (letter: string) => {
+  return getElementsByLetter(letter).length > 0;
+};
+
+const scrollToLetter = (letter: string) => {
+  if (!hasElementsStartingWith(letter)) return;
+
+  const element = document.getElementById(`letter-${letter}`);
+  if (element) {
+    elementsContainer.value?.scrollTo({
+      top: element.offsetTop - 80, // Account for the sticky header
+      behavior: "smooth",
+    });
+  }
+};
+
+const scrollToBottom = () => {
+  if (elementsContainer.value) {
+    elementsContainer.value.scrollTop = elementsContainer.value.scrollHeight;
+  }
+};
 
 const createDragPreview = (element: HTMLElement) => {
   const clone = element.cloneNode(true) as HTMLElement;
@@ -101,6 +210,7 @@ const createDragPreview = (element: HTMLElement) => {
   clone.style.left = "0";
   clone.style.margin = "0";
   clone.style.boxShadow = "none";
+  clone.style.backdropFilter = "none";
   document.body.appendChild(clone);
   return clone;
 };
@@ -118,7 +228,7 @@ const handleSidebarDragStart = (
   };
 
   const preview = createDragPreview(event.target as HTMLElement);
-  event.dataTransfer.setDragImage(preview, 25, 25);
+  event.dataTransfer.setDragImage(preview, 0, 0);
   event.dataTransfer.effectAllowed = "move";
 
   setTimeout(() => {
@@ -197,12 +307,13 @@ const handleElementDragOver = (event: DragEvent) => {
     position: { x, y },
   };
 
-  const targetElement = gameStore.canvasElements.find(
+  const targetElement = canvasElements.value.find(
     (e) =>
       e.id !== draggedElement.value.id && checkElementOverlap(testElement, e)
   );
 
   elementBeingDraggedOver.value = targetElement;
+  elementBeingDraggedOver.value.style.opacity = "0.8";
 };
 
 const handleDragEnd = (event: DragEvent, element: any) => {
@@ -219,7 +330,7 @@ const handleDragEnd = (event: DragEvent, element: any) => {
     event.clientY > canvasRect.bottom;
 
   if (isOutsideCanvas) {
-    gameStore.removeCanvasElement(element.id);
+    removeCanvasElement(element.id);
     draggedElement.value = null;
     elementBeingDraggedOver.value = null;
     return;
@@ -233,7 +344,7 @@ const handleDragEnd = (event: DragEvent, element: any) => {
   const boundedX = Math.max(0, Math.min(x, canvasRect.width - 48));
   const boundedY = Math.max(0, Math.min(y, canvasRect.height - 48));
 
-  gameStore.updateElementPosition(element.id, {
+  updateElementPosition(element.id, {
     x: boundedX,
     y: boundedY,
   });
@@ -242,7 +353,45 @@ const handleDragEnd = (event: DragEvent, element: any) => {
   elementBeingDraggedOver.value = null;
 };
 
-const handleDrop = (event: DragEvent) => {
+const combineElements = async (
+  element1: Element,
+  element2: Element,
+  position: { x: number; y: number }
+) => {
+  isCombining.value = true;
+
+  try {
+    const element = await $fetch<Element>("/api/elements/combine", {
+      method: "POST",
+      body: {
+        prompt: `You are an average question guesser, don't try to be smart. What do you think happens when we combine ${element1.name} and ${element2.name}? Give me a real everyday noun and a description, if unsure just return a related noun.`,
+      },
+    });
+
+    // Add the new element to available elements
+    addAvailableElement(element);
+
+    // Add the new combined element to the canvas
+    addCanvasElement({
+      ...element,
+      position: {
+        x: position.x,
+        y: position.y,
+      },
+    });
+
+    // Remove the original elements
+    removeCanvasElement(element1.id);
+    removeCanvasElement(element2.id);
+  } catch (error) {
+    console.error("Failed to combine elements:", error);
+    throw error;
+  } finally {
+    isCombining.value = false;
+  }
+};
+
+const handleDrop = async (event: DragEvent) => {
   event.preventDefault();
   if (!canvas.value || !draggedElement.value) return;
 
@@ -255,7 +404,7 @@ const handleDrop = (event: DragEvent) => {
 
   if (isOutsideCanvas) {
     if (draggedElement.value.id) {
-      gameStore.removeCanvasElement(draggedElement.value.id);
+      removeCanvasElement(draggedElement.value.id);
     }
     draggedElement.value = null;
     elementBeingDraggedOver.value = null;
@@ -274,27 +423,32 @@ const handleDrop = (event: DragEvent) => {
     position: { x: boundedX, y: boundedY },
   };
 
-  const targetElement = gameStore.canvasElements.find(
+  const targetElement = canvasElements.value.find(
     (e) =>
       e.id !== draggedElement.value.id && checkElementOverlap(testElement, e)
   );
 
   if (targetElement) {
-    alert("Combining!");
-  }
-
-  // If it's a new element from sidebar
-  if (!gameStore.canvasElements.find((e) => e.id === draggedElement.value.id)) {
-    gameStore.addCanvasElement({
-      ...draggedElement.value,
-      position: { x: boundedX, y: boundedY },
-    });
-  } else {
-    // Update existing element position
-    gameStore.updateElementPosition(draggedElement.value.id, {
+    await combineElements(draggedElement.value, targetElement, {
       x: boundedX,
       y: boundedY,
     });
+  } else {
+    // If it's a new element from sidebar
+    if (
+      !gameStore.canvasElements.find((e) => e.id === draggedElement.value.id)
+    ) {
+      addCanvasElement({
+        ...draggedElement.value,
+        position: { x: boundedX, y: boundedY },
+      });
+    } else {
+      // Update existing element position
+      updateElementPosition(draggedElement.value.id, {
+        x: boundedX,
+        y: boundedY,
+      });
+    }
   }
 
   draggedElement.value = null;
@@ -311,7 +465,28 @@ const handleDuplicate = (element: any) => {
       y: element.position.y + offset,
     },
   };
-  gameStore.addCanvasElement(newElement);
+  addCanvasElement(newElement);
+};
+
+const generateElement = async () => {
+  if (!newElementPrompt.value.trim()) return;
+
+  const element = await $fetch<Element>("/api/elements/generate", {
+    method: "POST",
+    body: { prompt: newElementPrompt.value },
+  });
+
+  addAvailableElement(element);
+  addCanvasElement({
+    ...element,
+    position: { x: 100, y: 100 },
+  });
+
+  newElementPrompt.value = "";
+
+  nextTick(() => {
+    scrollToBottom();
+  });
 };
 </script>
 
