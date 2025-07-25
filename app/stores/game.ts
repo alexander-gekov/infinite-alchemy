@@ -23,9 +23,8 @@ export interface StoredElement {
   };
 }
 
-const redisUrl = useRuntimeConfig().upstashUrl;
-
 export const useGameStore = defineStore("game", () => {
+  const redisUrl = useRuntimeConfig().upstashUrl;
   const isPlaying = ref(false);
   const availableElementsSet = ref(new Set<Element>());
   const gameStarted = useCookie("gameStarted", {
