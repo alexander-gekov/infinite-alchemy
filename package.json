@@ -1,5 +1,5 @@
 {
-  "name": "nuxt-app",
+  "name": "infinite-alchemy",
   "private": true,
   "type": "module",
   "scripts": {
@@ -41,7 +41,6 @@
     "zod": "^4.0.8",
     "zod-to-json-schema": "^3.24.6"
   },
-  "packageManager": "npm@10.9.0",
   "devDependencies": {
     "typescript": "^5.8.3"
   }
