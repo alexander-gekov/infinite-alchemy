@@ -6,7 +6,10 @@ import { Redis } from "@upstash/redis";
 const config = useRuntimeConfig();
 
 export default defineEventHandler(async (event) => {
-  const redis = Redis.fromEnv();
+  const redis = new Redis({
+    url: config.upstashUrl,
+    token: config.upstashToken,
+  });
 
   // Create a new ratelimiter, that allows 10 requests per 10 seconds
   const ratelimit = new Ratelimit({
