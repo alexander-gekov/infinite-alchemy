@@ -88,9 +88,16 @@
                   v-model="newElementPrompt"
                   type="text"
                   placeholder="A dinosaur with wings..."
+                  :disabled="isGenerating"
                   @keyup.enter="generateElement" />
-                <Button @click="generateElement" variant="default">
-                  <LucidePlus class="w-4 h-4" />
+                <Button
+                  @click="generateElement"
+                  variant="default"
+                  :disabled="isGenerating">
+                  <LucideLoader2
+                    v-if="isGenerating"
+                    class="w-4 h-4 animate-spin" />
+                  <LucidePlus v-else class="w-4 h-4" />
                 </Button>
               </div>
             </CardContent>
@@ -187,6 +194,7 @@ const dragOffset = ref({ x: 0, y: 0 });
 const elementBeingDraggedOver = ref<any>(null);
 const newElementPrompt = ref("");
 const isCombining = ref(false);
+const isGenerating = ref(false);
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -487,22 +495,30 @@ const handleDuplicate = (element: any) => {
 const generateElement = async () => {
   if (!newElementPrompt.value.trim()) return;
 
-  const element = await $fetch<Element>("/api/elements/generate", {
-    method: "POST",
-    body: { prompt: newElementPrompt.value },
-  });
+  isGenerating.value = true;
 
-  addAvailableElement(element);
-  addCanvasElement({
-    ...element,
-    position: { x: 100, y: 100 },
-  });
+  try {
+    const element = await $fetch<Element>("/api/elements/generate", {
+      method: "POST",
+      body: { prompt: newElementPrompt.value },
+    });
 
-  newElementPrompt.value = "";
+    addAvailableElement(element);
+    addCanvasElement({
+      ...element,
+      position: { x: 100, y: 100 },
+    });
 
-  nextTick(() => {
-    scrollToBottom();
-  });
+    newElementPrompt.value = "";
+
+    nextTick(() => {
+      scrollToBottom();
+    });
+  } catch (error) {
+    console.error("Failed to generate element:", error);
+  } finally {
+    isGenerating.value = false;
+  }
 };
 </script>
 
