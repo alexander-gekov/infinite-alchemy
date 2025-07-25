@@ -234,10 +234,6 @@ const handleDragEnd = (event: DragEvent, element: any) => {
     y: boundedY,
   });
 
-  if (elementBeingDraggedOver.value) {
-    alert("Combining!");
-  }
-
   draggedElement.value = null;
   elementBeingDraggedOver.value = null;
 };
@@ -268,6 +264,20 @@ const handleDrop = (event: DragEvent) => {
   // Keep element within canvas bounds
   const boundedX = Math.max(0, Math.min(x, canvasRect.width - 48));
   const boundedY = Math.max(0, Math.min(y, canvasRect.height - 48));
+
+  const testElement = {
+    ...draggedElement.value,
+    position: { x: boundedX, y: boundedY },
+  };
+
+  const targetElement = gameStore.canvasElements.find(
+    (e) =>
+      e.id !== draggedElement.value.id && checkElementOverlap(testElement, e)
+  );
+
+  if (targetElement) {
+    alert("Combining!");
+  }
 
   // If it's a new element from sidebar
   if (!gameStore.canvasElements.find((e) => e.id === draggedElement.value.id)) {
