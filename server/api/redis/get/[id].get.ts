@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     token: config.upstashToken,
   });
 
-  const element = await redis.get(id);
+  const element = await redis.get(id.split("_")[0]);
 
   return element as string;
 });
