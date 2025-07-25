@@ -107,10 +107,6 @@ export const useGameStore = defineStore("game", () => {
   };
 
   const addAvailableElement = async (element: Element) => {
-    if (availableElementsSet.value.keys().some((el) => el.id === element.id)) {
-      return;
-    }
-
     availableElementsSet.value.add(element);
 
     const storedElement: StoredElement = {

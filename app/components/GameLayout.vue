@@ -586,6 +586,7 @@ const generateElement = async () => {
       method: "POST",
       body: { prompt: newElementPrompt.value },
       timeout: 5000,
+      retry: 2,
     });
 
     addAvailableElement(element);
