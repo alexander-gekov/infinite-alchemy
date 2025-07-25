@@ -1,12 +1,23 @@
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { toast } from "vue-sonner";
+import { redisReadOnly } from "~/lib/redis";
 
 export interface Element {
   id: string;
   name: string;
   description: string;
   img: string;
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
+export interface StoredElement {
+  id: string;
+  name: string;
+  description: string;
   position: {
     x: number;
     y: number;
@@ -22,12 +33,16 @@ export const useGameStore = defineStore("game", () => {
   });
   const availableElementsStorage = useStorage(
     "availableElements",
-    [] as Element[]
+    [] as StoredElement[]
   );
-  const canvasElementsStorage = useStorage("canvasElements", [] as Element[]);
-  const canvasElements = ref<Element[]>(canvasElementsStorage.value);
+  const canvasElementsStorage = useStorage(
+    "canvasElements",
+    [] as StoredElement[]
+  );
+  const canvasElements = ref<Element[]>(
+    canvasElementsStorage.value.map((el) => ({ ...el, img: "" }))
+  );
 
-  // Computed property to expose the Set as an array
   const availableElements = computed(() =>
     Array.from(availableElementsSet.value).sort((a, b) =>
       a.name.localeCompare(b.name)
@@ -36,16 +51,37 @@ export const useGameStore = defineStore("game", () => {
 
   const startGame = async () => {
     isPlaying.value = true;
-    // Load elements from storage
+
     const storedElements = availableElementsStorage.value || [];
-    availableElementsSet.value = new Set(storedElements);
-    canvasElements.value = canvasElementsStorage.value || [];
+    for (const element of storedElements) {
+      try {
+        const img = await redisReadOnly.get(element.id);
+        availableElementsSet.value.add({
+          ...element,
+          img: typeof img === "string" ? img : "",
+        });
+      } catch (error) {
+        toast((error as Error).message);
+      }
+    }
+
+    const storedCanvasElements = canvasElementsStorage.value || [];
+    const canvasElementsWithImages = await Promise.all(
+      storedCanvasElements.map(async (el) => {
+        const img = await redisReadOnly.get(el.id?.split("_")[0] || "");
+        return {
+          ...el,
+          img: typeof img === "string" ? img : "",
+        };
+      })
+    );
+    canvasElements.value = canvasElementsWithImages;
 
     if (!gameStarted.value) {
       try {
         const promises = Array.from({ length: 2 }, () =>
           $fetch<Omit<Element, "position">>("api/elements/random", {
-            timeout: 5000,
+            timeout: 10000,
           })
         );
 
@@ -55,10 +91,15 @@ export const useGameStore = defineStore("game", () => {
           position: { x: 0, y: 0 },
         })) as Element[];
 
-        // Add new elements to the Set
-        newElements.forEach((element) =>
-          availableElementsSet.value.add(element)
-        );
+        for (const element of newElements) {
+          availableElementsSet.value.add(element);
+          availableElementsStorage.value.push({
+            id: element.id,
+            name: element.name,
+            description: element.description,
+            position: element.position,
+          });
+        }
         gameStarted.value = true;
       } catch (error) {
         toast((error as Error).message);
@@ -66,21 +107,38 @@ export const useGameStore = defineStore("game", () => {
     }
   };
 
-  const addAvailableElement = (element: Element) => {
+  const addAvailableElement = async (element: Element) => {
+    if (availableElementsSet.value.keys().some((el) => el.id === element.id)) {
+      return;
+    }
+
     availableElementsSet.value.add(element);
-    // Update storage with the array version
-    availableElementsStorage.value = Array.from(availableElementsSet.value);
+
+    const storedElement: StoredElement = {
+      id: element.id,
+      name: element.name,
+      description: element.description,
+      position: element.position,
+    };
+    availableElementsStorage.value = [
+      ...availableElementsStorage.value,
+      storedElement,
+    ];
   };
 
-  const addCanvasElement = (element: Element) => {
-    canvasElements.value = [
-      ...canvasElements.value,
-      {
-        ...element,
-        position: element.position || { x: 0, y: 0 },
-      },
+  const addCanvasElement = async (element: Element) => {
+    const storedElement: StoredElement = {
+      id: element.id,
+      name: element.name,
+      description: element.description,
+      position: element.position || { x: 0, y: 0 },
+    };
+
+    canvasElements.value = [...canvasElements.value, element];
+    canvasElementsStorage.value = [
+      ...canvasElementsStorage.value,
+      storedElement,
     ];
-    canvasElementsStorage.value = canvasElements.value;
   };
 
   const updateElementPosition = (
@@ -88,13 +146,15 @@ export const useGameStore = defineStore("game", () => {
     position: { x: number; y: number }
   ) => {
     const elementIndex = canvasElements.value.findIndex(
-      (e: Element) => e.id === elementId
+      (e) => e.id === elementId
     );
     if (elementIndex !== -1) {
       canvasElements.value = canvasElements.value.map((e, index) =>
         index === elementIndex ? { ...e, position } : e
       );
-      canvasElementsStorage.value = canvasElements.value;
+      canvasElementsStorage.value = canvasElementsStorage.value.map(
+        (e, index) => (index === elementIndex ? { ...e, position } : e)
+      );
     }
   };
 
@@ -102,7 +162,9 @@ export const useGameStore = defineStore("game", () => {
     canvasElements.value = canvasElements.value.filter(
       (e) => e.id !== elementId
     );
-    canvasElementsStorage.value = canvasElements.value;
+    canvasElementsStorage.value = canvasElementsStorage.value.filter(
+      (e) => e.id !== elementId
+    );
   };
 
   const clearCanvas = () => {

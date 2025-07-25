@@ -139,6 +139,7 @@
             <CardContent class="p-3">
               <div class="flex gap-2">
                 <Input
+                  ref="generateInput"
                   class="text-sm min-w-0"
                   v-model="newElementPrompt"
                   type="text"
@@ -245,7 +246,7 @@ import {
 import { Card, CardContent } from "#components";
 
 import { useGameStore, type Element } from "~/stores/game";
-import { useMediaQuery } from "@vueuse/core";
+import { onStartTyping, useMediaQuery } from "@vueuse/core";
 import { toast } from "vue-sonner";
 
 const gameStore = useGameStore();
@@ -270,6 +271,14 @@ const isDesktop = useMediaQuery(
 );
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+const generateInput = useTemplateRef<HTMLInputElement>("generateInput");
+
+onStartTyping(() => {
+  if (generateInput.value) {
+    generateInput.value.focus();
+  }
+});
 
 const getElementsByLetter = (letter: string) => {
   return availableElements.value.filter((element) =>
@@ -463,7 +472,7 @@ const combineElements = async (
       body: {
         prompt: `You are an average question guesser, don't try to be smart. What do you think happens when we combine ${element1.name} and ${element2.name}? Give me a real everyday noun and a description, if unsure just return a related noun.`,
       },
-      timeout: 5000,
+      retry: 2,
     });
 
     // Add the new element to available elements
@@ -482,7 +491,9 @@ const combineElements = async (
     removeCanvasElement(element1.id);
     removeCanvasElement(element2.id);
   } catch (error) {
-    toast((error as Error).message);
+    toast((error as Error).message, {
+      description: error as Error,
+    });
   } finally {
     isCombining.value = false;
   }
@@ -590,11 +601,11 @@ const generateElement = async () => {
     });
   } catch (error) {
     if ((error as any).statusCode === 429) {
-      toast.error(
+      toast(
         "You've reached the limit. Please wait a few minutes before generating more elements."
       );
     } else {
-      toast.error((error as Error).message);
+      toast((error as Error).message);
     }
   } finally {
     isGenerating.value = false;

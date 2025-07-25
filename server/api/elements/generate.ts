@@ -1,14 +1,14 @@
 import Together from "together-ai";
 import { ImageDataB64 } from "together-ai/resources";
 import { Ratelimit } from "@upstash/ratelimit"; // for deno: see above
-import { Redis } from "@upstash/redis";
+import { redis } from "~/lib/redis";
 
 const config = useRuntimeConfig();
 
 export default defineEventHandler(async (event) => {
   // Create a new ratelimiter, that allows 10 requests per 10 seconds
   const ratelimit = new Ratelimit({
-    redis: Redis.fromEnv(),
+    redis: redis,
     limiter: Ratelimit.tokenBucket(5, "5 m", 10),
     analytics: true,
     /**
@@ -49,8 +49,22 @@ export default defineEventHandler(async (event) => {
 
     const imageBase64 = (image.data[0] as ImageDataB64).b64_json;
 
+    const id = prompt.toLowerCase().replace(/\s+/g, "-");
+
+    const existingImage = await redis.get(id);
+    if (existingImage) {
+      return {
+        id,
+        name: prompt || "New Element",
+        description: "",
+        img: existingImage,
+      };
+    } else {
+      await redis.set(id, `data:image/png;base64,${imageBase64}`);
+    }
+
     return {
-      id: prompt.toLowerCase().replace(/\s+/g, "-"),
+      id,
       name: prompt || "New Element",
       description: "",
       img: `data:image/png;base64,${imageBase64}`,
