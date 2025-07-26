@@ -97,7 +97,7 @@
       <div
         class="fixed bottom-0 left-0 right-0 p-0 border-border z-30 md:absolute md:left-1/2 md:right-auto md:-translate-x-1/2 md:border-none md:mb-8">
         <div class="w-full md:w-96">
-          <Card class="shadow-lg pt-2">
+          <Card class="shadow-lg pt-2 md:pt-4">
             <CardContent class="p-3">
               <div class="flex flex-col md:flex-row gap-2">
                 <div
