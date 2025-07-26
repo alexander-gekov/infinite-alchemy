@@ -71,7 +71,7 @@
           @touchstart.prevent="handleTouchStart($event, element)"
           @dblclick="handleDuplicate(element)">
           <img
-            :src="element.img"
+            :src="element.img || logo"
             :alt="element.name"
             class="w-22 h-22 rounded-full transition-opacity duration-200"
             :class="{
@@ -210,7 +210,7 @@
                 :key="element.id"
                 class="flex items-center gap-2 py-2 md:px-2 hover:bg-gray-100 rounded">
                 <img
-                  :src="element.img"
+                  :src="element.img || logo"
                   :alt="element.name"
                   draggable="true"
                   @dragstart="handleSidebarDragStart($event, element, true)"
@@ -245,6 +245,7 @@ import {
 import { useGameStore, type Element } from "~/stores/game";
 import { onStartTyping, useMediaQuery } from "@vueuse/core";
 import { toast } from "vue-sonner";
+import logo from "~/assets/images/logo.png";
 
 const gameStore = useGameStore();
 const { availableElements, canvasElements } = storeToRefs(gameStore);

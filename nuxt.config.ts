@@ -25,7 +25,11 @@ export default defineNuxtConfig({
   app: {
     head: {
       meta: [
-        { name: "viewport", content: "initial-scale=1, viewport-fit=cover" },
+        {
+          name: "viewport",
+          content:
+            "initial-scale=1, viewport-fit=cover, user-scalable=no, user-scalable=0",
+        },
       ],
     },
   },
