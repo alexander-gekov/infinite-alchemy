@@ -52,32 +52,37 @@ export const useGameStore = defineStore("game", () => {
     isPlaying.value = true;
 
     const storedElements = availableElementsStorage.value || [];
-    const images = await $fetch<{ id: string; img: string }[]>(
-      `/api/redis/get/all`,
-      {
-        method: "POST",
-        body: { ids: storedElements.map((el) => el.id) },
+
+    if (gameStarted.value) {
+      try {
+        const images = await $fetch<{ id: string; img: string }[]>(
+          `/api/redis/get/all`,
+          {
+            method: "POST",
+            body: { ids: storedElements.map((el) => el.id) },
+          }
+        );
+
+        for (const element of storedElements) {
+          availableElementsSet.value.add({
+            ...element,
+            img: images.find((img) => img.id === element.id)?.img || "",
+          });
+        }
+        const storedCanvasElements = canvasElementsStorage.value || [];
+        const canvasElementsWithImages = storedCanvasElements.map((el) => {
+          const elId = el.id.split("_")[0];
+          const img = images.find((img) => img.id === elId)?.img || "";
+          return {
+            ...el,
+            img,
+          };
+        });
+        canvasElements.value = canvasElementsWithImages;
+      } catch (error) {
+        toast((error as Error).message);
       }
-    );
-
-    for (const element of storedElements) {
-      availableElementsSet.value.add({
-        ...element,
-        img: images.find((img) => img.id === element.id)?.img || "",
-      });
-    }
-    const storedCanvasElements = canvasElementsStorage.value || [];
-    const canvasElementsWithImages = storedCanvasElements.map((el) => {
-      const elId = el.id.split("_")[0];
-      const img = images.find((img) => img.id === elId)?.img || "";
-      return {
-        ...el,
-        img,
-      };
-    });
-    canvasElements.value = canvasElementsWithImages;
-
-    if (!gameStarted.value) {
+    } else {
       try {
         const promises = Array.from({ length: 2 }, () =>
           $fetch<Omit<Element, "position">>("api/elements/random", {
