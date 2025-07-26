@@ -1,6 +1,6 @@
 <template>
   <UseScreenSafeArea top right bottom left>
-    <Toaster />
+    <Toaster position="top-center" />
     <div class="min-h-screen bg-background">
       <!-- <NavBar /> -->
       <main>

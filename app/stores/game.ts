@@ -68,7 +68,8 @@ export const useGameStore = defineStore("game", () => {
     }
     const storedCanvasElements = canvasElementsStorage.value || [];
     const canvasElementsWithImages = storedCanvasElements.map((el) => {
-      const img = images.find((img) => img.id === el.id)?.img || "";
+      const elId = el.id.split("_")[0];
+      const img = images.find((img) => img.id === elId)?.img || "";
       return {
         ...el,
         img,

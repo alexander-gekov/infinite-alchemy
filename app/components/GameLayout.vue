@@ -218,7 +218,7 @@
                   @touchstart.prevent="handleSidebarTouchStart($event, element)"
                   @touchmove.prevent="handleTouchMove"
                   @touchend.prevent="handleTouchEnd"
-                  class="w-8 h-8 md:w-12 md:h-12 rounded-full cursor-move" />
+                  class="w-10 h-10 md:w-12 md:h-12 rounded-full cursor-move" />
                 <span
                   class="text-xs md:text-sm text-gray-600 touch-none select-none"
                   >{{ element.name }}</span
@@ -488,9 +488,13 @@ const combineElements = async (
     removeCanvasElement(element1.id);
     removeCanvasElement(element2.id);
   } catch (error) {
-    toast((error as Error).message, {
-      description: error as Error,
-    });
+    if ((error as any).statusCode === 429) {
+      toast(
+        "You've reached the limit. Please wait a few minutes before generating more elements."
+      );
+    } else {
+      toast((error as Error).message);
+    }
   } finally {
     isCombining.value = false;
   }
