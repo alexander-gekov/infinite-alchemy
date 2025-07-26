@@ -208,21 +208,21 @@
               <div
                 v-for="element in getElementsByLetter(letter)"
                 :key="element.id"
-                class="flex items-center gap-2 py-2 md:px-2 hover:bg-gray-100 rounded cursor-move text-wrap touch-none"
-                draggable="true"
-                @dragstart="handleSidebarDragStart($event, element, true)"
-                @dragend="handleSidebarDragEnd($event)">
+                class="flex items-center gap-2 py-2 md:px-2 hover:bg-gray-100 rounded">
                 <img
                   :src="element.img"
                   :alt="element.name"
+                  draggable="true"
+                  @dragstart="handleSidebarDragStart($event, element, true)"
+                  @dragend="handleSidebarDragEnd($event)"
                   @touchstart.prevent="handleSidebarTouchStart($event, element)"
                   @touchmove.prevent="handleTouchMove"
                   @touchend.prevent="handleTouchEnd"
-                  class="w-8 h-8 md:w-12 md:h-12 rounded-full touch-none"
-                  draggable="false" />
-                <span class="text-xs md:text-sm text-gray-600 touch-none">{{
-                  element.name
-                }}</span>
+                  class="w-8 h-8 md:w-12 md:h-12 rounded-full cursor-move" />
+                <span
+                  class="text-xs md:text-sm text-gray-600 touch-none select-none"
+                  >{{ element.name }}</span
+                >
               </div>
             </div>
           </template>

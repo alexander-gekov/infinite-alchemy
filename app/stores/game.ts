@@ -52,28 +52,28 @@ export const useGameStore = defineStore("game", () => {
     isPlaying.value = true;
 
     const storedElements = availableElementsStorage.value || [];
-    for (const element of storedElements) {
-      try {
-        const img = await $fetch<string>(`/api/redis/get/${element.id}`);
-        availableElementsSet.value.add({
-          ...element,
-          img: typeof img === "string" ? img : "",
-        });
-      } catch (error) {
-        toast((error as Error).message);
+    const images = await $fetch<{ id: string; img: string }[]>(
+      `/api/redis/get/all`,
+      {
+        method: "POST",
+        body: { ids: storedElements.map((el) => el.id) },
       }
-    }
-
-    const storedCanvasElements = canvasElementsStorage.value || [];
-    const canvasElementsWithImages = await Promise.all(
-      storedCanvasElements.map(async (el) => {
-        const img = await $fetch<string>(`/api/redis/get/${el.id}`);
-        return {
-          ...el,
-          img: typeof img === "string" ? img : "",
-        };
-      })
     );
+
+    for (const element of storedElements) {
+      availableElementsSet.value.add({
+        ...element,
+        img: images.find((img) => img.id === element.id)?.img || "",
+      });
+    }
+    const storedCanvasElements = canvasElementsStorage.value || [];
+    const canvasElementsWithImages = storedCanvasElements.map((el) => {
+      const img = images.find((img) => img.id === el.id)?.img || "";
+      return {
+        ...el,
+        img,
+      };
+    });
     canvasElements.value = canvasElementsWithImages;
 
     if (!gameStarted.value) {
