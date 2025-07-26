@@ -22,6 +22,13 @@ export default defineNuxtConfig({
      */
     componentDir: "~/components/ui",
   },
+  app: {
+    head: {
+      meta: [
+        { name: "viewport", content: "initial-scale=1, viewport-fit=cover" },
+      ],
+    },
+  },
   runtimeConfig: {
     togetheraiApiKey: process.env.TOGETHER_AI_API_KEY,
     public: {

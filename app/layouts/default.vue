@@ -1,11 +1,13 @@
 <template>
-  <Toaster />
-  <div class="min-h-screen bg-background">
-    <!-- <NavBar /> -->
-    <main>
-      <slot />
-    </main>
-  </div>
+  <UseScreenSafeArea top right bottom left>
+    <Toaster />
+    <div class="min-h-screen bg-background">
+      <!-- <NavBar /> -->
+      <main>
+        <slot />
+      </main>
+    </div>
+  </UseScreenSafeArea>
 </template>
 
 <script setup lang="ts">

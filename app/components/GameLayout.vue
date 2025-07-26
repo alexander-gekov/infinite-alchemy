@@ -237,13 +237,10 @@ import {
   LucidePower,
   LucideRecycle,
   LucidePlus,
-  LucideLoaderPinwheel,
   LucideLoader2,
   LucideGithub,
   LucideTwitter,
-  LucideMoreVertical,
 } from "lucide-vue-next";
-import { Card, CardContent } from "#components";
 
 import { useGameStore, type Element } from "~/stores/game";
 import { onStartTyping, useMediaQuery } from "@vueuse/core";
@@ -272,7 +269,7 @@ const isDesktop = useMediaQuery(
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
-const generateInput = useTemplateRef<HTMLInputElement>("generateInput");
+const generateInput = ref<HTMLInputElement | null>(null);
 
 onStartTyping(() => {
   if (generateInput.value) {
