@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   // Create a new ratelimiter, that allows 10 requests per 10 seconds
   const ratelimit = new Ratelimit({
     redis: redis,
-    limiter: Ratelimit.tokenBucket(5, "5 m", 10),
+    limiter: Ratelimit.tokenBucket(5, "2 m", 12),
     timeout: 6000,
     analytics: true,
     /**
@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
     properties: {
       name: {
         type: "string",
-        description: "A random common or abstract noun",
+        description: "A random common or abstract noun up to 3 words",
       },
       description: {
         type: "string",
@@ -89,8 +89,9 @@ export default defineEventHandler(async (event) => {
     description = output.description;
 
     const image = await together.images.create({
-      prompt: `shiny 3D illustration of ${name} (${description}), minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
+      prompt: `claymorphic 3D illustration of ${name} (${description}), minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
       model: "black-forest-labs/FLUX.1-schnell",
+      negative_prompt: "clay, complex, realistic",
       steps: 2,
       response_format: "base64",
       disable_safety_checker: true,

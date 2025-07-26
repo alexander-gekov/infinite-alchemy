@@ -10,44 +10,6 @@
     </div>
     <div
       class="flex-1 bg-white relative min-w-[30%] md:min-w-[40%] md:shrink-0">
-      <!-- Mobile Header -->
-      <div
-        v-if="!isDesktop"
-        class="flex items-center justify-between p-4 border-b border-border bg-background">
-        <div class="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            class="flex items-center gap-2"
-            @click="gameStore.clearCanvas">
-            <LucideRecycle class="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            class="flex items-center gap-2"
-            @click="gameStore.resetGame">
-            <LucidePower class="h-4 w-4" />
-          </Button>
-        </div>
-        <div class="flex gap-4">
-          <NuxtLink
-            as="button"
-            class="text-muted-foreground hover:text-primary"
-            to="https://github.com/alexander-gekov"
-            target="_blank">
-            <LucideGithub class="h-5 w-5" />
-          </NuxtLink>
-          <NuxtLink
-            as="button"
-            class="text-muted-foreground hover:text-primary"
-            to="https://x.com/AlexanderGekov"
-            target="_blank">
-            <LucideTwitter class="h-5 w-5" />
-          </NuxtLink>
-        </div>
-      </div>
-
       <div
         ref="canvas"
         class="absolute inset-0 bg-repeat z-10"
@@ -135,27 +97,66 @@
       <div
         class="fixed bottom-0 left-0 right-0 p-0 border-border z-30 md:absolute md:left-1/2 md:right-auto md:-translate-x-1/2 md:border-none md:mb-8">
         <div class="w-full md:w-96">
-          <Card class="shadow-lg">
+          <Card class="shadow-lg pt-2">
             <CardContent class="p-3">
-              <div class="flex gap-2">
-                <Input
-                  ref="generateInput"
-                  class="text-sm min-w-0"
-                  v-model="newElementPrompt"
-                  type="text"
-                  placeholder="A dinosaur with wings..."
-                  :disabled="isGenerating"
-                  @keyup.enter="generateElement" />
-                <Button
-                  @click="generateElement"
-                  variant="default"
-                  :disabled="isGenerating"
-                  class="shrink-0">
-                  <LucideLoader2
-                    v-if="isGenerating"
-                    class="w-4 h-4 animate-spin" />
-                  <LucidePlus v-else class="w-4 h-4" />
-                </Button>
+              <div class="flex flex-col md:flex-row gap-2">
+                <div
+                  v-if="!isDesktop"
+                  class="flex items-center justify-between gap-2">
+                  <div class="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="flex items-center gap-2"
+                      @click="gameStore.clearCanvas">
+                      <LucideRecycle class="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="flex items-center gap-2"
+                      @click="gameStore.resetGame">
+                      <LucidePower class="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div class="flex gap-4">
+                    <NuxtLink
+                      as="button"
+                      class="text-muted-foreground hover:text-primary"
+                      to="https://github.com/alexander-gekov"
+                      target="_blank">
+                      <LucideGithub class="h-5 w-5" />
+                    </NuxtLink>
+                    <NuxtLink
+                      as="button"
+                      class="text-muted-foreground hover:text-primary"
+                      to="https://x.com/AlexanderGekov"
+                      target="_blank">
+                      <LucideTwitter class="h-5 w-5" />
+                    </NuxtLink>
+                  </div>
+                </div>
+
+                <div class="flex gap-2 w-full">
+                  <Input
+                    ref="generateInput"
+                    class="text-sm min-w-0"
+                    v-model="newElementPrompt"
+                    type="text"
+                    placeholder="A dinosaur with wings..."
+                    :disabled="isGenerating"
+                    @keyup.enter="generateElement" />
+                  <Button
+                    @click="generateElement"
+                    variant="default"
+                    :disabled="isGenerating"
+                    class="shrink-0">
+                    <LucideLoader2
+                      v-if="isGenerating"
+                      class="w-4 h-4 animate-spin" />
+                    <LucidePlus v-else class="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -164,7 +165,7 @@
     </div>
 
     <div
-      class="w-6 md:w-8 bg-background flex flex-col items-center py-2 mb-24 md:mb-0">
+      class="w-6 md:w-8 bg-background flex flex-col items-center py-2 mb-48 overflow-y-auto md:mb-0">
       <button
         v-for="letter in alphabet"
         :key="letter"
@@ -186,7 +187,7 @@
         class="p-4 flex-1 overflow-y-auto overscroll-contain"
         ref="elementsContainer">
         <h2
-          class="text-xs text-center md:px-2 md:text-md font-semibold md:font-bold">
+          class="text-xs text-start md:px-2 md:text-md font-semibold md:font-bold">
           Available Elements ({{ availableElements.length }})
         </h2>
         <div class="grid gap-2 pt-2">

@@ -45,7 +45,7 @@ export default defineEventHandler(async () => {
     properties: {
       name: {
         type: "string",
-        description: "A random common or abstract noun",
+        description: "A random common or abstract noun up to 3 words",
       },
       description: {
         type: "string",
