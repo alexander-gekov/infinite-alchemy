@@ -1,75 +1,53 @@
-# Nuxt Minimal Starter
+# Infinite Alchemy
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+<p align="center">
+  <img src="app/assets/images/logo.png" alt="Infinite Alchemy Logo" width="200"/>
+</p>
 
-## Setup
+<p align="center">
+  <a href="https://infinitealche.my">
+    <img src="app/assets/images/cover.png" alt="Infinite Alchemy Cover" width="100%" style="border-radius: 10px"/>
+  </a>
+</p>
 
-Make sure to install dependencies:
+<div align="center">
+  <a href="https://infinitealche.my">
+    <img src="https://img.shields.io/badge/Play%20Now-8A2BE2?style=for-the-badge" alt="Play Now"/>
+  </a>
+</div>
+
+## About
+
+Infinite Alchemy is an engaging puzzle game where you combine elements to discover new ones. Use your creativity and logic to unlock hundreds of unique combinations!
+
+## Features
+
+- 🧪 Combine elements to create new ones
+- ✨ Beautiful and intuitive interface
+- 🎮 Easy to play
+- 💾 Progress automatically saved
+- 🌟 Prompt new combinations
+
+## Development
+
+This project is built with:
+
+- [Nuxt 3](https://nuxt.com) - The Vue Framework
+- [TogetherAI](https://together.ai) - Llama 3.3 70B for text and Flux-schnell for image generation
+
+### Setup
 
 ```bash
-# npm
+# Install dependencies
 npm install
 
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
-```
-
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
+# Start development server
 npm run dev
 
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
-```
-
-## Production
-
-Build the application for production:
-
-```bash
-# npm
+# Build for production
 npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
 ```
 
-Locally preview production build:
+## License
 
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+MIT License © 2024
