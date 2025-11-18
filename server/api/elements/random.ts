@@ -5,7 +5,7 @@ import { Redis } from "@upstash/redis";
 
 const config = useRuntimeConfig();
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
   const redis = new Redis({
     url: config.upstashUrl,
     token: config.upstashToken,
@@ -13,7 +13,7 @@ export default defineEventHandler(async () => {
 
   const ratelimit = new Ratelimit({
     redis: redis,
-    limiter: Ratelimit.tokenBucket(200, "1 d", 500),
+    limiter: Ratelimit.tokenBucket(10, "1 d", 15),
     enableProtection: true,
     timeout: 6000,
     analytics: true,
@@ -25,9 +25,7 @@ export default defineEventHandler(async () => {
     prefix: "@upstash/ratelimit",
   });
 
-  // Use a constant string to limit all requests with a single ratelimit
-  // Or use a userID, apiKey or ip address for individual limits.
-  const identifier = "api";
+  const identifier = getClientIP(event) || "anonymous";
   const { success } = await ratelimit.limit(identifier);
 
   if (!success) {
