@@ -1,6 +1,6 @@
 import Together from "together-ai";
 import { ImageDataB64 } from "together-ai/resources";
-import { Ratelimit } from "@upstash/ratelimit"; // for deno: see above
+import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
 const config = useRuntimeConfig();
@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
     prefix: "@upstash/ratelimit",
   });
 
-  const identifier = getClientIP(event) || "anonymous";
+  const identifier = getRequestIP(event) || "anonymous";
   const { success } = await ratelimit.limit(identifier);
 
   if (!success) {
