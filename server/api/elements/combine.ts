@@ -11,10 +11,9 @@ export default defineEventHandler(async (event) => {
     token: config.upstashToken,
   });
 
-  // Create a new ratelimiter, that allows 10 requests per 10 seconds
   const ratelimit = new Ratelimit({
     redis: redis,
-    limiter: Ratelimit.tokenBucket(10, "14 d", 20),
+    limiter: Ratelimit.tokenBucket(200, "1 d", 500),
     enableProtection: true,
     timeout: 6000,
     analytics: true,
