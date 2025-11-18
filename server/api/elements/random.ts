@@ -1,7 +1,8 @@
 import Together from "together-ai";
 import { ImageDataB64, ImageDataURL } from "together-ai/resources";
-import { Ratelimit } from "@upstash/ratelimit"; // for deno: see above
+import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { getClientIP } from "h3";
 
 const config = useRuntimeConfig();
 
