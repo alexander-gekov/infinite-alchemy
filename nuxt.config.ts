@@ -35,6 +35,7 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     togetheraiApiKey: process.env.TOGETHER_AI_API_KEY,
+    appPassword: process.env.APP_PASSWORD || 'freedom',
     public: {
       upstashUrl: process.env.UPSTASH_REDIS_REST_URL,
       upstashReadOnlyToken: process.env.UPSTASH_REDIS_REST_READ_ONLY_TOKEN,
