@@ -244,6 +244,7 @@ import {
 } from "lucide-vue-next";
 
 import { useGameStore, type Element } from "~/stores/game";
+import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
 import { onStartTyping, useMediaQuery } from "@vueuse/core";
 import { toast } from "vue-sonner";
 import logo from "~/assets/images/logo.png";
@@ -471,7 +472,8 @@ const combineElements = async (
       body: {
         prompt: `You are an average question guesser, don't try to be smart. What do you think happens when we combine ${element1.name} and ${element2.name}? Give me a real everyday noun and a description, if unsure just return a related noun.`,
       },
-      retry: 2,
+      timeout: AI_API_TIMEOUT_MS,
+      retry: 1,
     });
 
     // Add the new element to available elements
@@ -588,8 +590,8 @@ const generateElement = async () => {
     const element = await $fetch<Element>("/api/elements/generate", {
       method: "POST",
       body: { prompt: newElementPrompt.value },
-      timeout: 5000,
-      retry: 2,
+      timeout: AI_API_TIMEOUT_MS,
+      retry: 1,
     });
 
     addAvailableElement(element);
