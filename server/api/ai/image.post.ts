@@ -1,6 +1,25 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { z } from "zod";
 import { generateImageWithOpenRouter } from "../../utils/openrouter";
+
+const ASPECT_RATIOS = [
+  "1:1",
+  "2:3",
+  "3:2",
+  "3:4",
+  "4:3",
+  "4:5",
+  "5:4",
+  "9:16",
+  "16:9",
+  "21:9",
+] as const;
+
+const bodySchema = z.object({
+  prompt: z.string().min(1).max(8000),
+  aspectRatio: z.enum(ASPECT_RATIOS).optional(),
+});
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -19,7 +38,7 @@ export default defineEventHandler(async (event) => {
   });
 
   const ratelimit = new Ratelimit({
-    redis: redis,
+    redis,
     limiter: Ratelimit.tokenBucket(10, "1 d", 15),
     enableProtection: true,
     timeout: 6000,
@@ -37,42 +56,39 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const { prompt } = await readBody(event);
+  const rawBody = await readBody(event);
+  const parsed = bodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw createError({
+      statusCode: 400,
+      message: parsed.error.issues.map((i) => i.message).join("; "),
+    });
+  }
+
+  const { prompt, aspectRatio } = parsed.data;
 
   try {
-    const { imageDataUrl } = await generateImageWithOpenRouter({
+    const { imageDataUrl, text } = await generateImageWithOpenRouter({
       apiKey: config.openrouterApiKey,
       model: config.openrouterImageModel,
-      prompt: `shiny 3D illustration of ${prompt}, minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
+      prompt,
+      imageConfig: aspectRatio ? { aspect_ratio: aspectRatio } : undefined,
       referer: config.openrouterHttpReferer,
       appTitle: config.openrouterAppTitle,
     });
 
-    const id = String(prompt).toLowerCase().replace(/\s+/g, "-");
-
-    const existingImage = await redis.get(id);
-    if (existingImage) {
-      return {
-        id,
-        name: prompt || "New Element",
-        description: "",
-        img: existingImage,
-      };
-    }
-
-    await redis.set(id, imageDataUrl);
-
     return {
-      id,
-      name: prompt || "New Element",
-      description: "",
-      img: imageDataUrl,
+      image: imageDataUrl,
+      text,
+      model: config.openrouterImageModel,
     };
-  } catch (error) {
-    console.error("Error generating element:", error);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Image generation failed";
+    console.error("OpenRouter image error:", err);
     throw createError({
-      statusCode: 500,
-      message: "Failed to generate element",
+      statusCode: 502,
+      message,
     });
   }
 });

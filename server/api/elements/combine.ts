@@ -1,11 +1,26 @@
-import Together from "together-ai";
-import { ImageDataB64 } from "together-ai/resources";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import {
+  generateImageWithOpenRouter,
+  openRouterJsonObjectCompletion,
+} from "../../utils/openrouter";
 
-const config = useRuntimeConfig();
+type ElementJson = {
+  name: string;
+  description: string;
+};
 
 export default defineEventHandler(async (event) => {
+  const config = useRuntimeConfig();
+
+  if (!config.openrouterApiKey) {
+    throw createError({
+      statusCode: 503,
+      message:
+        "OpenRouter is not configured. Set the OPENROUTER_API_KEY environment variable.",
+    });
+  }
+
   const redis = new Redis({
     url: config.upstashUrl,
     token: config.upstashToken,
@@ -17,11 +32,6 @@ export default defineEventHandler(async (event) => {
     enableProtection: true,
     timeout: 6000,
     analytics: true,
-    /**
-     * Optional prefix for the keys used in redis. This is useful if you want to share a redis
-     * instance with other applications and want to avoid key collisions. The default prefix is
-     * "@upstash/ratelimit"
-     */
     prefix: "@upstash/ratelimit",
   });
 
@@ -29,7 +39,7 @@ export default defineEventHandler(async (event) => {
   const { success } = await ratelimit.limit(identifier);
 
   if (!success) {
-    return createError({
+    throw createError({
       statusCode: 429,
       message: "Too many requests",
     });
@@ -37,47 +47,27 @@ export default defineEventHandler(async (event) => {
 
   const { prompt } = await readBody(event);
 
-  const together = new Together({
-    apiKey: config.togetheraiApiKey,
-  });
-
-  const elementSchema = {
-    type: "object",
-    properties: {
-      name: {
-        type: "string",
-        description: "A random common or abstract noun up to 3 words",
-      },
-      description: {
-        type: "string",
-        description: "A short one sentence description of the name.",
-      },
-    },
-    required: ["name", "description"],
-  };
-
   try {
     let name = prompt;
     let description = "";
-    const extract = await together.chat.completions.create({
+
+    const output = await openRouterJsonObjectCompletion<ElementJson>({
+      apiKey: config.openrouterApiKey,
+      model: config.openrouterTextModel,
       messages: [
         {
           role: "system",
-          content: `Generate a common or abstract noun and description based on the prompt: ${prompt}`,
+          content: `Generate a common or abstract noun and description based on the prompt: ${prompt}
+
+Respond with JSON only, using this exact shape: {"name":"...","description":"..."}
+- name: a random common or abstract noun, up to 3 words
+- description: one short sentence describing the name`,
         },
       ],
-      model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-      response_format: { type: "json_object", schema: elementSchema },
       temperature: 1.2,
+      referer: config.openrouterHttpReferer,
+      appTitle: config.openrouterAppTitle,
     });
-
-    let output;
-    if (extract?.choices?.[0]?.message?.content) {
-      output = JSON.parse(extract?.choices?.[0]?.message?.content) as {
-        name: string;
-        description: string;
-      };
-    }
 
     if (!output?.name || !output?.description) {
       throw new Error("Failed to generate element details");
@@ -86,17 +76,13 @@ export default defineEventHandler(async (event) => {
     name = output.name;
     description = output.description;
 
-    const image = await together.images.create({
-      prompt: `claymorphic 3D illustration of ${name} (${description}), minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
-      model: "black-forest-labs/FLUX.1-schnell",
-      negative_prompt: "clay, complex, realistic",
-      steps: 2,
-      response_format: "base64",
-      disable_safety_checker: true,
-      seed: 123,
+    const { imageDataUrl } = await generateImageWithOpenRouter({
+      apiKey: config.openrouterApiKey,
+      model: config.openrouterImageModel,
+      prompt: `claymorphic 3D illustration of ${name} (${description}), minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution. Avoid clay texture, excessive complexity, or photorealism.`,
+      referer: config.openrouterHttpReferer,
+      appTitle: config.openrouterAppTitle,
     });
-
-    const imageBase64 = (image.data[0] as ImageDataB64).b64_json;
 
     const id = name.toLowerCase().replace(/\s+/g, "-");
 
@@ -109,15 +95,15 @@ export default defineEventHandler(async (event) => {
         description: description,
         img: existingImage,
       };
-    } else {
-      await redis.set(id, `data:image/png;base64,${imageBase64}`);
     }
+
+    await redis.set(id, imageDataUrl);
 
     return {
       id,
       name: name,
       description: description,
-      img: `data:image/png;base64,${imageBase64}`,
+      img: imageDataUrl,
     };
   } catch (error) {
     console.error("Error generating element:", error);

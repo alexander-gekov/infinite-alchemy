@@ -33,7 +33,7 @@ Infinite Alchemy is an engaging puzzle game where you combine elements to discov
 This project is built with: 
 
 - [Nuxt 3](https://nuxt.com) - The Vue Framework
-- [TogetherAI](https://together.ai) - Llama 3.3 70B for text and Flux-schnell for image generation
+- [OpenRouter](https://openrouter.ai) - Gemini 2.5 Flash for text and Gemini 2.5 Flash Image for generation
 
 ### Setup
 
