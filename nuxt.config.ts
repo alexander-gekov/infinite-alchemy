@@ -35,6 +35,11 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     togetheraiApiKey: process.env.TOGETHER_AI_API_KEY,
+    openrouterApiKey: process.env.OPENROUTER_API_KEY,
+    openrouterImageModel:
+      process.env.OPENROUTER_IMAGE_MODEL ?? "google/gemini-2.5-flash-image",
+    openrouterHttpReferer: process.env.OPENROUTER_HTTP_REFERER,
+    openrouterAppTitle: process.env.OPENROUTER_APP_TITLE ?? "infinite-alchemy",
     appPassword: process.env.APP_PASSWORD || 'freedom',
     public: {
       upstashUrl: process.env.UPSTASH_REDIS_REST_URL,
