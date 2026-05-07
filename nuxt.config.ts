@@ -34,8 +34,9 @@ export default defineNuxtConfig({
     },
   },
   runtimeConfig: {
-    togetheraiApiKey: process.env.TOGETHER_AI_API_KEY,
     openrouterApiKey: process.env.OPENROUTER_API_KEY,
+    openrouterTextModel:
+      process.env.OPENROUTER_TEXT_MODEL ?? "google/gemini-2.5-flash",
     openrouterImageModel:
       process.env.OPENROUTER_IMAGE_MODEL ?? "google/gemini-2.5-flash-image",
     openrouterHttpReferer: process.env.OPENROUTER_HTTP_REFERER,

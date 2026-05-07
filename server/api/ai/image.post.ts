@@ -1,7 +1,7 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { z } from "zod";
-import { generateImageWithOpenRouter } from "../../utils/openrouterImage";
+import { generateImageWithOpenRouter } from "../../utils/openrouter";
 
 const ASPECT_RATIOS = [
   "1:1",

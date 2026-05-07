@@ -1,11 +1,26 @@
-import Together from "together-ai";
-import { ImageDataB64, ImageDataURL } from "together-ai/resources";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import {
+  generateImageWithOpenRouter,
+  openRouterJsonObjectCompletion,
+} from "../../utils/openrouter";
 
-const config = useRuntimeConfig();
+type ElementJson = {
+  name: string;
+  description: string;
+};
 
 export default defineEventHandler(async (event) => {
+  const config = useRuntimeConfig();
+
+  if (!config.openrouterApiKey) {
+    throw createError({
+      statusCode: 503,
+      message:
+        "OpenRouter is not configured. Set the OPENROUTER_API_KEY environment variable.",
+    });
+  }
+
   const redis = new Redis({
     url: config.upstashUrl,
     token: config.upstashToken,
@@ -17,11 +32,6 @@ export default defineEventHandler(async (event) => {
     enableProtection: true,
     timeout: 6000,
     analytics: true,
-    /**
-     * Optional prefix for the keys used in redis. This is useful if you want to share a redis
-     * instance with other applications and want to avoid key collisions. The default prefix is
-     * "@upstash/ratelimit"
-     */
     prefix: "@upstash/ratelimit",
   });
 
@@ -29,81 +39,59 @@ export default defineEventHandler(async (event) => {
   const { success } = await ratelimit.limit(identifier);
 
   if (!success) {
-    return createError({
+    throw createError({
       statusCode: 429,
       message: "Too many requests",
     });
   }
 
-  const together = new Together({
-    apiKey: config.togetheraiApiKey,
-  });
-
-  const elementSchema = {
-    type: "object",
-    properties: {
-      name: {
-        type: "string",
-        description: "A random common or abstract noun up to 3 words",
-      },
-      description: {
-        type: "string",
-        description: "A short one sentence description of the name.",
-      },
-    },
-    required: ["name", "description"],
-  };
-
   try {
-    const extract = await together.chat.completions.create({
+    const output = await openRouterJsonObjectCompletion<ElementJson>({
+      apiKey: config.openrouterApiKey,
+      model: config.openrouterTextModel,
       messages: [
         {
           role: "system",
-          content:
-            "Generate a random common noun (Refer to general categories of people, places, or things) or a random abstract noun (Refer to ideas, concepts, or qualities that cannot be touched or seen (e.g., love, freedom, happiness)) and description and return it in JSON format. The name should be a singular common noun in lowercase without punctuation.",
+          content: `Generate a random common noun (general categories of people, places, or things) or a random abstract noun (ideas, concepts, or qualities that cannot be touched or seen, e.g. love, freedom, happiness) and a short description.
+
+The name must be a singular common noun in lowercase without punctuation.
+
+Respond with JSON only, using this exact shape: {"name":"...","description":"..."}`,
+        },
+        {
+          role: "user",
+          content: "Generate one random element now.",
         },
       ],
-      model: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-      response_format: { type: "json_object", schema: elementSchema },
       temperature: 1.2,
       seed: Math.floor(Math.random() * 1000000),
-      frequency_penalty: 1.0,
-      presence_penalty: 1.0,
+      frequencyPenalty: 1.0,
+      presencePenalty: 1.0,
+      referer: config.openrouterHttpReferer,
+      appTitle: config.openrouterAppTitle,
     });
-
-    let output;
-    if (extract?.choices?.[0]?.message?.content) {
-      output = JSON.parse(extract?.choices?.[0]?.message?.content) as {
-        name: string;
-        description: string;
-      };
-    }
 
     if (!output?.name || !output?.description) {
       throw new Error("Failed to generate element details");
     }
 
-    const image = await together.images.create({
+    const { imageDataUrl } = await generateImageWithOpenRouter({
+      apiKey: config.openrouterApiKey,
+      model: config.openrouterImageModel,
       prompt: `Claymorphic soft 3D illustration of ${output.name}, minimalistic design, smooth surfaces, pastel colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
-      model: "black-forest-labs/FLUX.1-schnell",
-      steps: 1,
-      response_format: "base64",
-      disable_safety_checker: true,
-      seed: 123,
+      referer: config.openrouterHttpReferer,
+      appTitle: config.openrouterAppTitle,
     });
 
     const id = output.name.toLowerCase().replace(/\s+/g, "-");
 
-    await redis.set(
-      id,
-      `data:image/png;base64,${(image.data[0] as ImageDataB64).b64_json}`
-    );
+    await redis.set(id, imageDataUrl);
 
     return {
       id,
       name: output.name,
       description: output.description,
-      img: `data:image/png;base64,${(image.data[0] as ImageDataB64).b64_json}`,
+      img: imageDataUrl,
     };
   } catch (error) {
     console.error("Error generating element:", error);

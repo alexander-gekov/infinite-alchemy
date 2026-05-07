@@ -1,11 +1,18 @@
-import Together from "together-ai";
-import { ImageDataB64 } from "together-ai/resources";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-
-const config = useRuntimeConfig();
+import { generateImageWithOpenRouter } from "../../utils/openrouter";
 
 export default defineEventHandler(async (event) => {
+  const config = useRuntimeConfig();
+
+  if (!config.openrouterApiKey) {
+    throw createError({
+      statusCode: 503,
+      message:
+        "OpenRouter is not configured. Set the OPENROUTER_API_KEY environment variable.",
+    });
+  }
+
   const redis = new Redis({
     url: config.upstashUrl,
     token: config.upstashToken,
@@ -17,11 +24,6 @@ export default defineEventHandler(async (event) => {
     enableProtection: true,
     timeout: 6000,
     analytics: true,
-    /**
-     * Optional prefix for the keys used in redis. This is useful if you want to share a redis
-     * instance with other applications and want to avoid key collisions. The default prefix is
-     * "@upstash/ratelimit"
-     */
     prefix: "@upstash/ratelimit",
   });
 
@@ -29,7 +31,7 @@ export default defineEventHandler(async (event) => {
   const { success } = await ratelimit.limit(identifier);
 
   if (!success) {
-    return createError({
+    throw createError({
       statusCode: 429,
       message: "Too many requests",
     });
@@ -37,23 +39,16 @@ export default defineEventHandler(async (event) => {
 
   const { prompt } = await readBody(event);
 
-  const together = new Together({
-    apiKey: config.togetheraiApiKey,
-  });
-
   try {
-    const image = await together.images.create({
+    const { imageDataUrl } = await generateImageWithOpenRouter({
+      apiKey: config.openrouterApiKey,
+      model: config.openrouterImageModel,
       prompt: `shiny 3D illustration of ${prompt}, minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
-      model: "black-forest-labs/FLUX.1-schnell",
-      steps: 4,
-      response_format: "base64",
-      disable_safety_checker: true,
-      seed: Math.floor(Math.random() * 1000000),
+      referer: config.openrouterHttpReferer,
+      appTitle: config.openrouterAppTitle,
     });
 
-    const imageBase64 = (image.data[0] as ImageDataB64).b64_json;
-
-    const id = prompt.toLowerCase().replace(/\s+/g, "-");
+    const id = String(prompt).toLowerCase().replace(/\s+/g, "-");
 
     const existingImage = await redis.get(id);
     if (existingImage) {
@@ -63,15 +58,15 @@ export default defineEventHandler(async (event) => {
         description: "",
         img: existingImage,
       };
-    } else {
-      await redis.set(id, `data:image/png;base64,${imageBase64}`);
     }
+
+    await redis.set(id, imageDataUrl);
 
     return {
       id,
       name: prompt || "New Element",
       description: "",
-      img: `data:image/png;base64,${imageBase64}`,
+      img: imageDataUrl,
     };
   } catch (error) {
     console.error("Error generating element:", error);
