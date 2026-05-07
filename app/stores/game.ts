@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { toast } from "vue-sonner";
+import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
 
 export interface Element {
   id: string;
@@ -85,8 +86,8 @@ export const useGameStore = defineStore("game", () => {
     } else {
       try {
         const promises = Array.from({ length: 2 }, () =>
-          $fetch<Omit<Element, "position">>("api/elements/random", {
-            timeout: 10000,
+          $fetch<Omit<Element, "position">>("/api/elements/random", {
+            timeout: AI_API_TIMEOUT_MS,
           })
         );
 
