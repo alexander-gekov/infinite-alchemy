@@ -2,10 +2,16 @@ import { Ratelimit } from "@upstash/ratelimit";
 import type { Redis } from "@upstash/redis";
 
 /**
- * Shared token bucket for AI / element routes: `refillRate` tokens added per
- * `interval`, capped at `maxTokens` burst. Previously 10 / "1 d" / 15.
+ * Shared token bucket for AI element endpoints (all use this via
+ * `createApiRatelimit`):
+ * `/api/elements/random`, `/api/elements/generate`, `/api/elements/combine`.
+ * One bucket per client identifier (IP): any of these routes consumes the
+ * same tokens.
+ *
+ * Parameters: `refillRate` tokens per `interval`, capped at `maxTokens` burst.
+ * Progression: 10 / "1 d" / 15 → 20 / "1 d" / 30 → 50 / "1 d" / 75.
  */
-const apiTokenBucket = Ratelimit.tokenBucket(20, "1 d", 30);
+const apiTokenBucket = Ratelimit.tokenBucket(50, "1 d", 75);
 
 export function createApiRatelimit(redis: Redis) {
   return new Ratelimit({
