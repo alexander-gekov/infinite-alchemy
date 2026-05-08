@@ -1,6 +1,6 @@
-import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { generateImageWithOpenRouter } from "../../utils/openrouter";
+import { createApiRatelimit } from "../../utils/upstashRatelimit";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -18,14 +18,7 @@ export default defineEventHandler(async (event) => {
     token: config.upstashToken,
   });
 
-  const ratelimit = new Ratelimit({
-    redis: redis,
-    limiter: Ratelimit.tokenBucket(10, "1 d", 15),
-    enableProtection: true,
-    timeout: 6000,
-    analytics: true,
-    prefix: "@upstash/ratelimit",
-  });
+  const ratelimit = createApiRatelimit(redis);
 
   const identifier = getRequestIP(event) || "anonymous";
   const { success } = await ratelimit.limit(identifier);
