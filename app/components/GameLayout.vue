@@ -10,7 +10,12 @@
     </div>
     <div
       class="flex-1 bg-white relative min-w-[30%] md:min-w-[40%] md:shrink-0">
+      <!-- Story mode overlay -->
+      <StoryCanvas v-if="isStoryMode" />
+
+      <!-- Freeplay canvas -->
       <div
+        v-else
         ref="canvas"
         class="absolute inset-0 bg-repeat z-10"
         :class="{ 'top-[max(0.5rem,env(safe-area-inset-top))]': !isDesktop }"
@@ -44,54 +49,71 @@
             element.name
           }}</span>
         </div>
-
-        <!-- Desktop Actions -->
-        <template v-if="isDesktop">
-          <NuxtLink
-            as="button"
-            class="absolute top-4 right-6 z-50 cursor-pointer text-muted-foreground hover:text-primary"
-            to="https://github.com/alexander-gekov"
-            target="_blank">
-            <LucideGithub />
-          </NuxtLink>
-          <NuxtLink
-            as="button"
-            class="absolute top-14 right-6 z-50 cursor-pointer text-muted-foreground hover:text-primary"
-            to="https://x.com/AlexanderGekov"
-            target="_blank">
-            <LucideTwitter />
-          </NuxtLink>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger
-                class="absolute bottom-8 right-6 z-50 flex items-center justify-center"
-                as-child>
-                <LucideRecycle
-                  class="w-fit cursor-pointer text-muted-foreground hover:text-primary"
-                  @click="gameStore.clearCanvas" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Clear canvas</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger
-                class="absolute bottom-18 right-6 z-50 flex items-center justify-center"
-                as-child>
-                <LucidePower
-                  class="w-fit cursor-pointer text-muted-foreground hover:text-primary"
-                  @click="gameStore.resetGame" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Reset game</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </template>
       </div>
+
+      <!-- Desktop Actions -->
+      <template v-if="isDesktop">
+        <NuxtLink
+          as="button"
+          class="absolute top-4 right-6 z-50 cursor-pointer text-muted-foreground hover:text-primary"
+          to="https://github.com/alexander-gekov"
+          target="_blank">
+          <LucideGithub />
+        </NuxtLink>
+        <NuxtLink
+          as="button"
+          class="absolute top-14 right-6 z-50 cursor-pointer text-muted-foreground hover:text-primary"
+          to="https://x.com/AlexanderGekov"
+          target="_blank">
+          <LucideTwitter />
+        </NuxtLink>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger
+              class="absolute bottom-8 right-6 z-50 flex items-center justify-center"
+              as-child>
+              <LucideRecycle
+                class="w-fit cursor-pointer text-muted-foreground hover:text-primary"
+                @click="gameStore.clearCanvas" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Clear canvas</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger
+              class="absolute bottom-18 right-6 z-50 flex items-center justify-center"
+              as-child>
+              <LucidePower
+                class="w-fit cursor-pointer text-muted-foreground hover:text-primary"
+                @click="gameStore.resetGame" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Reset game</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <!-- Mode toggle -->
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger
+              class="absolute bottom-28 right-6 z-50 flex items-center justify-center"
+              as-child>
+              <component
+                :is="isStoryMode ? LucideGamepad2 : LucideBookOpen"
+                class="w-fit cursor-pointer text-muted-foreground hover:text-primary"
+                @click="toggleGameMode" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{{ isStoryMode ? 'Switch to Freeplay' : 'Switch to Story Mode' }}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </template>
 
       <!-- Rate limit indicator -->
       <div
@@ -127,6 +149,16 @@
                       @click="gameStore.resetGame">
                       <LucidePower class="h-4 w-4" />
                     </Button>
+                    <!-- Mobile mode toggle -->
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="flex items-center gap-2"
+                      @click="toggleGameMode">
+                      <component
+                        :is="isStoryMode ? LucideGamepad2 : LucideBookOpen"
+                        class="h-4 w-4" />
+                    </Button>
                   </div>
                   <div class="flex gap-4">
                     <NuxtLink
@@ -152,7 +184,7 @@
                     class="text-sm min-w-0"
                     v-model="newElementPrompt"
                     type="text"
-                    placeholder="A dinosaur with wings..."
+                    :placeholder="isStoryMode ? 'Type your guess...' : 'A dinosaur with wings...'"
                     :disabled="isGenerating"
                     @keyup.enter="generateElement" />
                   <Button
@@ -263,16 +295,22 @@ import {
   LucideGithub,
   LucideTwitter,
   LucideTrash2,
+  LucideBookOpen,
+  LucideGamepad2,
 } from "lucide-vue-next";
 
 import { useGameStore, type Element } from "~/stores/game";
+import { useStoryStore } from "~/stores/story";
 import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
 import { onStartTyping, useMediaQuery } from "@vueuse/core";
 import { toast } from "vue-sonner";
 import logo from "~/assets/images/logo.png";
 
 const gameStore = useGameStore();
-const { availableElements, canvasElements } = storeToRefs(gameStore);
+const storyStore = useStoryStore();
+const { availableElements, canvasElements, gameMode } = storeToRefs(gameStore);
+
+const isStoryMode = computed(() => gameMode.value === "story");
 const {
   addAvailableElement,
   addCanvasElement,
@@ -306,8 +344,19 @@ const isCombining = ref(false);
 const isGenerating = ref(false);
 const isDesktop = useMediaQuery(
   "(min-width: 1024px)",
-  { ssrWidth: 768 } // Will enable SSR mode and render like if the screen was 768px wide
+  { ssrWidth: 768 }
 );
+
+const toggleGameMode = () => {
+  if (isStoryMode.value) {
+    gameStore.setGameMode("freeplay");
+  } else {
+    gameStore.setGameMode("story");
+    if (!storyStore.story) {
+      storyStore.generateStory();
+    }
+  }
+};
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -515,10 +564,8 @@ const combineElements = async (
       retry: 1,
     });
 
-    // Add the new element to available elements
     addAvailableElement(element);
 
-    // Add the new combined element to the canvas
     addCanvasElement({
       ...element,
       position: {
@@ -527,9 +574,12 @@ const combineElements = async (
       },
     });
 
-    // Remove the original elements
     removeCanvasElement(element1.id);
     removeCanvasElement(element2.id);
+
+    if (isStoryMode.value && storyStore.checkAnswer(element.name)) {
+      toast.success(`Correct! "${element.name}" fills the blank.`);
+    }
   } catch (error) {
     if ((error as any).statusCode === 429) {
       toast(
@@ -639,6 +689,10 @@ const generateElement = async () => {
       ...element,
       position: isDesktop.value ? { x: 100, y: 100 } : { x: 50, y: 50 },
     });
+
+    if (isStoryMode.value && storyStore.checkAnswer(element.name)) {
+      toast.success(`Correct! "${element.name}" fills the blank.`);
+    }
 
     newElementPrompt.value = "";
 

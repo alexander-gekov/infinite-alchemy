@@ -32,8 +32,11 @@ const STARTER_ELEMENTS: Omit<StoredElement, "position">[] = [
 
 const STARTER_IDS = new Set(STARTER_ELEMENTS.map((e) => e.id));
 
+export type GameMode = "freeplay" | "story";
+
 export const useGameStore = defineStore("game", () => {
   const isPlaying = ref(false);
+  const gameMode = ref<GameMode>("freeplay");
   const availableElementsSet = ref(new Set<Element>());
   const gameStarted = useCookie("gameStarted", {
     default: () => false,
@@ -212,14 +215,20 @@ export const useGameStore = defineStore("game", () => {
 
   const resetGame = () => {
     gameStarted.value = false;
+    gameMode.value = "freeplay";
     availableElementsSet.value = new Set();
     canvasElements.value = [];
     availableElementsStorage.value = [];
     canvasElementsStorage.value = [];
   };
 
+  const setGameMode = (mode: GameMode) => {
+    gameMode.value = mode;
+  };
+
   return {
     isPlaying,
+    gameMode,
     availableElements,
     canvasElements,
     startGame,
@@ -230,5 +239,6 @@ export const useGameStore = defineStore("game", () => {
     removeCanvasElement,
     clearCanvas,
     resetGame,
+    setGameMode,
   };
 });
