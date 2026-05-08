@@ -1,7 +1,6 @@
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { toast } from "vue-sonner";
-import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
 
 export interface Element {
   id: string;
@@ -24,6 +23,15 @@ export interface StoredElement {
   };
 }
 
+const STARTER_ELEMENTS: Omit<StoredElement, "position">[] = [
+  { id: "earth", name: "Earth", description: "Solid ground beneath our feet" },
+  { id: "fire", name: "Fire", description: "A blazing flame of heat and light" },
+  { id: "water", name: "Water", description: "The essence of life, flowing freely" },
+  { id: "air", name: "Air", description: "The invisible breath of the atmosphere" },
+];
+
+const STARTER_IDS = new Set(STARTER_ELEMENTS.map((e) => e.id));
+
 export const useGameStore = defineStore("game", () => {
   const isPlaying = ref(false);
   const availableElementsSet = ref(new Set<Element>());
@@ -44,9 +52,19 @@ export const useGameStore = defineStore("game", () => {
   );
 
   const availableElements = computed(() =>
-    Array.from(availableElementsSet.value).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    )
+    Array.from(availableElementsSet.value).sort((a, b) => {
+      const aStarter = STARTER_IDS.has(a.id);
+      const bStarter = STARTER_IDS.has(b.id);
+      if (aStarter && bStarter) {
+        return (
+          STARTER_ELEMENTS.findIndex((s) => s.id === a.id) -
+          STARTER_ELEMENTS.findIndex((s) => s.id === b.id)
+        );
+      }
+      if (aStarter) return -1;
+      if (bStarter) return 1;
+      return a.name.localeCompare(b.name);
+    })
   );
 
   const startGame = async () => {
@@ -54,7 +72,7 @@ export const useGameStore = defineStore("game", () => {
 
     const storedElements = availableElementsStorage.value || [];
 
-    if (gameStarted.value) {
+    if (gameStarted.value && storedElements.length > 0) {
       try {
         const images = await $fetch<{ id: string; img: string }[]>(
           `/api/redis/get/all`,
@@ -85,19 +103,19 @@ export const useGameStore = defineStore("game", () => {
       }
     } else {
       try {
-        const promises = Array.from({ length: 2 }, () =>
-          $fetch<Omit<Element, "position">>("/api/elements/random", {
-            timeout: AI_API_TIMEOUT_MS,
-          })
+        const starterIds = STARTER_ELEMENTS.map((e) => e.id);
+        const images = await $fetch<{ id: string; img: string }[]>(
+          `/api/redis/get/all`,
+          { method: "POST", body: { ids: starterIds } }
         );
 
-        const responses = await Promise.all(promises);
-        const newElements = responses.map((response) => ({
-          ...response,
-          position: { x: 0, y: 0 },
-        })) as Element[];
-
-        for (const element of newElements) {
+        for (const starter of STARTER_ELEMENTS) {
+          const img = images.find((i) => i.id === starter.id)?.img || "";
+          const element: Element = {
+            ...starter,
+            img,
+            position: { x: 0, y: 0 },
+          };
           availableElementsSet.value.add(element);
           availableElementsStorage.value.push({
             id: element.id,
@@ -169,6 +187,24 @@ export const useGameStore = defineStore("game", () => {
     );
   };
 
+  const removeAvailableElement = (baseId: string) => {
+    for (const el of availableElementsSet.value) {
+      if (el.id === baseId) {
+        availableElementsSet.value.delete(el);
+        break;
+      }
+    }
+    availableElementsStorage.value = availableElementsStorage.value.filter(
+      (e) => e.id !== baseId
+    );
+    canvasElements.value = canvasElements.value.filter(
+      (e) => e.id.split("_")[0] !== baseId
+    );
+    canvasElementsStorage.value = canvasElementsStorage.value.filter(
+      (e) => e.id.split("_")[0] !== baseId
+    );
+  };
+
   const clearCanvas = () => {
     canvasElements.value = [];
     canvasElementsStorage.value = [];
@@ -188,6 +224,7 @@ export const useGameStore = defineStore("game", () => {
     canvasElements,
     startGame,
     addAvailableElement,
+    removeAvailableElement,
     addCanvasElement,
     updateElementPosition,
     removeCanvasElement,

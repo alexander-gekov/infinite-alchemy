@@ -4,6 +4,7 @@ import {
   openRouterJsonObjectCompletion,
 } from "../../utils/openrouter";
 import { createApiRatelimit } from "../../utils/upstashRatelimit";
+import { getRateLimitIdentifier } from "../../utils/rateLimitIdentity";
 
 type ElementJson = {
   name: string;
@@ -28,7 +29,7 @@ export default defineEventHandler(async (event) => {
 
   const ratelimit = createApiRatelimit(redis);
 
-  const identifier = getRequestIP(event) || "anonymous";
+  const identifier = getRateLimitIdentifier(event);
   const { success } = await ratelimit.limit(identifier);
 
   if (!success) {
