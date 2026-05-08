@@ -1,5 +1,6 @@
 <template>
-  <div class="flex h-screen relative">
+  <div
+    class="flex h-dvh min-h-dvh relative box-border pt-[env(safe-area-inset-top,0px)]">
     <div
       v-if="isCombining"
       class="absolute inset-0 bg-black/50 flex items-center justify-center z-40">
@@ -13,7 +14,9 @@
       <div
         ref="canvas"
         class="absolute inset-0 bg-repeat z-10"
-        :class="{ 'top-[60px]': !isDesktop }"
+        :class="{
+          'top-[calc(60px+env(safe-area-inset-top,0px))]': !isDesktop,
+        }"
         @dragover.prevent
         @drop="handleDrop"
         @touchmove.prevent="handleTouchMove"
@@ -95,7 +98,7 @@
 
       <!-- Floating Generate UI -->
       <div
-        class="fixed bottom-0 left-0 right-0 p-0 border-border z-30 md:absolute md:left-1/2 md:right-auto md:-translate-x-1/2 md:border-none md:mb-8">
+        class="fixed bottom-0 left-0 right-0 z-30 border-border p-0 md:absolute md:left-1/2 md:right-auto md:mb-8 md:-translate-x-1/2 md:border-none pb-[max(0px,env(safe-area-inset-bottom))] ps-[max(0px,env(safe-area-inset-left))] pe-[max(0px,env(safe-area-inset-right))]">
         <div class="w-full md:w-96">
           <Card class="shadow-lg pt-2 md:pt-4">
             <CardContent class="p-3">
@@ -159,13 +162,19 @@
                 </div>
               </div>
             </CardContent>
+            <p
+              v-if="aiRateHint"
+              class="text-[10px] leading-tight text-muted-foreground/60 text-center px-3 pb-2 pt-0.5 tabular-nums md:pb-1.5"
+              aria-live="polite">
+              {{ aiRateHint }}
+            </p>
           </Card>
         </div>
       </div>
     </div>
 
     <div
-      class="w-6 md:w-8 bg-background flex flex-col items-center py-2 mb-48 overflow-y-auto md:mb-0">
+      class="mb-[calc(12rem+env(safe-area-inset-bottom,0px))] flex w-6 shrink-0 flex-col items-center overflow-y-auto bg-background py-2 md:mb-0 md:w-8">
       <button
         v-for="letter in alphabet"
         :key="letter"
@@ -182,7 +191,7 @@
     </div>
 
     <div
-      class="w-36 md:w-64 bg-background border-l border-gray-200 flex flex-col mb-24 md:mb-0 overflow-hidden">
+      class="mb-[calc(6rem+env(safe-area-inset-bottom,0px))] flex w-36 shrink-0 flex-col overflow-hidden border-l border-gray-200 bg-background md:mb-0 md:w-64">
       <div
         class="p-4 flex-1 overflow-y-auto overscroll-contain"
         ref="elementsContainer">
@@ -208,22 +217,39 @@
               </div>
               <div
                 v-for="element in getElementsByLetter(letter)"
-                :key="element.id"
-                class="flex items-center gap-2 py-2 md:px-2 hover:bg-gray-100 rounded">
-                <img
-                  :src="element.img || logo"
-                  :alt="element.name"
-                  draggable="true"
-                  @dragstart="handleSidebarDragStart($event, element, true)"
-                  @dragend="handleSidebarDragEnd($event)"
-                  @touchstart.prevent="handleSidebarTouchStart($event, element)"
-                  @touchmove.prevent="handleTouchMove"
-                  @touchend.prevent="handleTouchEnd"
-                  class="w-10 h-10 md:w-12 md:h-12 rounded-full cursor-move" />
-                <span
-                  class="text-xs md:text-sm text-gray-600 touch-none select-none"
-                  >{{ element.name }}</span
-                >
+                :key="element.id">
+                <ContextMenu>
+                  <ContextMenuTrigger as-child>
+                    <div
+                      class="flex cursor-context-menu items-center gap-2 rounded py-2 hover:bg-gray-100 md:px-2">
+                      <img
+                        :src="element.img || logo"
+                        :alt="element.name"
+                        draggable="true"
+                        @dragstart="
+                          handleSidebarDragStart($event, element, true)
+                        "
+                        @dragend="handleSidebarDragEnd($event)"
+                        @touchstart.prevent="
+                          handleSidebarTouchStart($event, element)
+                        "
+                        @touchmove.prevent="handleTouchMove"
+                        @touchend.prevent="handleTouchEnd"
+                        class="h-10 w-10 cursor-move rounded-full md:h-12 md:w-12" />
+                      <span
+                        class="touch-none select-none text-xs text-gray-600 md:text-sm"
+                        >{{ element.name }}</span
+                      >
+                    </div>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem
+                      variant="destructive"
+                      @select="gameStore.removeAvailableElement(element.id)">
+                      Remove
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
               </div>
             </div>
           </template>
@@ -243,6 +269,13 @@ import {
   LucideTwitter,
 } from "lucide-vue-next";
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "~/components/ui/context-menu";
+import { useAiRateLimit } from "~/lib/aiRateLimit";
 import { useGameStore, type Element } from "~/stores/game";
 import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
 import { onStartTyping, useMediaQuery } from "@vueuse/core";
@@ -272,7 +305,24 @@ const isDesktop = useMediaQuery(
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
-const generateInput = ref<HTMLInputElement | null>(null);
+const { remaining: aiRemaining, updateAiRateLimitFromHeaders } =
+  useAiRateLimit();
+
+const aiFetchObserve = {
+  onResponse({ response }: { response: Response }) {
+    updateAiRateLimitFromHeaders(response.headers);
+  },
+  onResponseError({ response }: { response: Response }) {
+    updateAiRateLimitFromHeaders(response.headers);
+  },
+} as const;
+
+const aiRateHint = computed(() => {
+  const n = unref(aiRemaining);
+  if (n === null) return "";
+  if (n <= 0) return "AI rate limit reached";
+  return `${n} request${n === 1 ? "" : "s"} left before limit`;
+});
 
 onStartTyping(() => {
   if (generateInput.value) {
@@ -474,6 +524,7 @@ const combineElements = async (
       },
       timeout: AI_API_TIMEOUT_MS,
       retry: 1,
+      ...aiFetchObserve,
     });
 
     // Add the new element to available elements
@@ -592,6 +643,7 @@ const generateElement = async () => {
       body: { prompt: newElementPrompt.value },
       timeout: AI_API_TIMEOUT_MS,
       retry: 1,
+      ...aiFetchObserve,
     });
 
     addAvailableElement(element);
@@ -788,8 +840,3 @@ const handleSidebarTouchStart = (event: TouchEvent, element: any) => {
 };
 </script>
 
-<style scoped>
-.h-screen {
-  height: 100vh;
-}
-</style>

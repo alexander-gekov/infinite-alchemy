@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { toast } from "vue-sonner";
 import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
+import { updateAiRateLimitFromHeaders } from "~/lib/aiRateLimit";
 
 export interface Element {
   id: string;
@@ -88,6 +89,12 @@ export const useGameStore = defineStore("game", () => {
         const promises = Array.from({ length: 2 }, () =>
           $fetch<Omit<Element, "position">>("/api/elements/random", {
             timeout: AI_API_TIMEOUT_MS,
+            onResponse({ response }) {
+              updateAiRateLimitFromHeaders(response.headers);
+            },
+            onResponseError({ response }) {
+              updateAiRateLimitFromHeaders(response.headers);
+            },
           })
         );
 
@@ -126,6 +133,27 @@ export const useGameStore = defineStore("game", () => {
       ...availableElementsStorage.value,
       storedElement,
     ];
+  };
+
+  const removeAvailableElement = (elementId: string) => {
+    for (const el of [...availableElementsSet.value]) {
+      if (el.id === elementId) {
+        availableElementsSet.value.delete(el);
+        break;
+      }
+    }
+    availableElementsStorage.value = availableElementsStorage.value.filter(
+      (e) => e.id !== elementId
+    );
+
+    const canvasIdsToRemove = canvasElements.value
+      .filter(
+        (e) => e.id === elementId || e.id.startsWith(`${elementId}_`)
+      )
+      .map((e) => e.id);
+    for (const id of canvasIdsToRemove) {
+      removeCanvasElement(id);
+    }
   };
 
   const addCanvasElement = async (element: Element) => {
@@ -188,6 +216,7 @@ export const useGameStore = defineStore("game", () => {
     canvasElements,
     startGame,
     addAvailableElement,
+    removeAvailableElement,
     addCanvasElement,
     updateElementPosition,
     removeCanvasElement,

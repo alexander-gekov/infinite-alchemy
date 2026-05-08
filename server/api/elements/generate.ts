@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { generateImageWithOpenRouter } from "../../utils/openrouter";
+import { appendAiRateLimitHeaders } from "../../utils/rateLimitHeaders";
 import { createApiRatelimit } from "../../utils/upstashRatelimit";
 
 export default defineEventHandler(async (event) => {
@@ -21,9 +22,10 @@ export default defineEventHandler(async (event) => {
   const ratelimit = createApiRatelimit(redis);
 
   const identifier = getRequestIP(event) || "anonymous";
-  const { success } = await ratelimit.limit(identifier);
+  const rate = await ratelimit.limit(identifier);
+  appendAiRateLimitHeaders(event, rate);
 
-  if (!success) {
+  if (!rate.success) {
     throw createError({
       statusCode: 429,
       message: "Too many requests",
