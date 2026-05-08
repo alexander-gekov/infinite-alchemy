@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen relative">
+  <div class="flex h-dvh relative">
     <div
       v-if="isCombining"
       class="absolute inset-0 bg-black/50 flex items-center justify-center z-40">
@@ -13,7 +13,7 @@
       <div
         ref="canvas"
         class="absolute inset-0 bg-repeat z-10"
-        :class="{ 'top-[60px]': !isDesktop }"
+        :class="{ 'top-[max(0.5rem,env(safe-area-inset-top))]': !isDesktop }"
         @dragover.prevent
         @drop="handleDrop"
         @touchmove.prevent="handleTouchMove"
@@ -93,9 +93,18 @@
         </template>
       </div>
 
+      <!-- Rate limit indicator -->
+      <div
+        v-if="rateLimitRemaining !== null"
+        class="absolute bottom-16 left-4 z-20 select-none pointer-events-none md:bottom-20">
+        <span class="text-xs text-muted-foreground/40">
+          ~{{ rateLimitRemaining }} generations left
+        </span>
+      </div>
+
       <!-- Floating Generate UI -->
       <div
-        class="fixed bottom-0 left-0 right-0 p-0 border-border z-30 md:absolute md:left-1/2 md:right-auto md:-translate-x-1/2 md:border-none md:mb-8">
+        class="fixed bottom-0 left-0 right-0 p-0 pb-[env(safe-area-inset-bottom)] border-border z-30 md:absolute md:left-1/2 md:right-auto md:-translate-x-1/2 md:border-none md:mb-8 md:pb-0">
         <div class="w-full md:w-96">
           <Card class="shadow-lg pt-2 md:pt-4">
             <CardContent class="p-3">
@@ -206,25 +215,37 @@
               <div class="text-xs md:text-sm font-semibold text-gray-500 py-1">
                 {{ letter }}
               </div>
-              <div
+              <ContextMenu
                 v-for="element in getElementsByLetter(letter)"
-                :key="element.id"
-                class="flex items-center gap-2 py-2 md:px-2 hover:bg-gray-100 rounded">
-                <img
-                  :src="element.img || logo"
-                  :alt="element.name"
-                  draggable="true"
-                  @dragstart="handleSidebarDragStart($event, element, true)"
-                  @dragend="handleSidebarDragEnd($event)"
-                  @touchstart.prevent="handleSidebarTouchStart($event, element)"
-                  @touchmove.prevent="handleTouchMove"
-                  @touchend.prevent="handleTouchEnd"
-                  class="w-10 h-10 md:w-12 md:h-12 rounded-full cursor-move" />
-                <span
-                  class="text-xs md:text-sm text-gray-600 touch-none select-none"
-                  >{{ element.name }}</span
-                >
-              </div>
+                :key="element.id">
+                <ContextMenuTrigger as-child>
+                  <div
+                    class="flex items-center gap-2 py-2 md:px-2 hover:bg-gray-100 rounded">
+                    <img
+                      :src="element.img || logo"
+                      :alt="element.name"
+                      draggable="true"
+                      @dragstart="handleSidebarDragStart($event, element, true)"
+                      @dragend="handleSidebarDragEnd($event)"
+                      @touchstart.prevent="handleSidebarTouchStart($event, element)"
+                      @touchmove.prevent="handleTouchMove"
+                      @touchend.prevent="handleTouchEnd"
+                      class="w-10 h-10 md:w-12 md:h-12 rounded-full cursor-move" />
+                    <span
+                      class="text-xs md:text-sm text-gray-600 touch-none select-none"
+                      >{{ element.name }}</span
+                    >
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem
+                    variant="destructive"
+                    @click="gameStore.removeAvailableElement(element.id)">
+                    <LucideTrash2 class="mr-2 h-4 w-4" />
+                    Remove
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             </div>
           </template>
         </div>
@@ -241,6 +262,7 @@ import {
   LucideLoader2,
   LucideGithub,
   LucideTwitter,
+  LucideTrash2,
 } from "lucide-vue-next";
 
 import { useGameStore, type Element } from "~/stores/game";
@@ -257,6 +279,23 @@ const {
   removeCanvasElement,
   updateElementPosition,
 } = gameStore;
+const rateLimitRemaining = ref<number | null>(null);
+
+const fetchRateLimitStatus = async () => {
+  try {
+    const { remaining } = await $fetch<{ remaining: number; reset: number }>(
+      "/api/ratelimit/status"
+    );
+    rateLimitRemaining.value = remaining;
+  } catch {
+    // non-critical; swallow silently
+  }
+};
+
+onMounted(() => {
+  fetchRateLimitStatus();
+});
+
 const canvas = ref<HTMLElement | null>(null);
 const elementsContainer = ref<HTMLElement | null>(null);
 const draggedElement = ref<any>(null);
@@ -501,6 +540,7 @@ const combineElements = async (
     }
   } finally {
     isCombining.value = false;
+    fetchRateLimitStatus();
   }
 };
 
@@ -615,6 +655,7 @@ const generateElement = async () => {
     }
   } finally {
     isGenerating.value = false;
+    fetchRateLimitStatus();
   }
 };
 
@@ -788,8 +829,3 @@ const handleSidebarTouchStart = (event: TouchEvent, element: any) => {
 };
 </script>
 
-<style scoped>
-.h-screen {
-  height: 100vh;
-}
-</style>
