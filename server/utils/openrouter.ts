@@ -60,7 +60,81 @@ async function postOpenRouter(
 
 export type OpenRouterImageConfig = {
   aspect_ratio?: string;
+  /** Pixel width when the provider supports explicit dimensions (e.g. BFL FLUX on OpenRouter). */
+  width?: number;
+  /** Pixel height when the provider supports explicit dimensions (e.g. BFL FLUX on OpenRouter). */
+  height?: number;
 };
+
+const FLUX_DIM_MIN = 64;
+/** ~0.26 MP at 512² — below OpenRouter’s ~1 MP aspect_ratio presets for FLUX. */
+const FLUX_DEFAULT_EDGE = 512;
+
+function parseFluxDimension(raw: string | undefined): number | undefined {
+  if (raw == null || raw === "") {
+    return undefined;
+  }
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < FLUX_DIM_MIN) {
+    return undefined;
+  }
+  return n;
+}
+
+function fluxOutputDimensionsFromEnv():
+  | { width: number; height: number }
+  | undefined {
+  const w = parseFluxDimension(process.env.OPENROUTER_FLUX_IMAGE_WIDTH);
+  const h = parseFluxDimension(process.env.OPENROUTER_FLUX_IMAGE_HEIGHT);
+  if (w != null && h != null) {
+    return { width: w, height: h };
+  }
+  return undefined;
+}
+
+function isBlackForestFluxModel(model: string): boolean {
+  const id = model.toLowerCase();
+  return id.startsWith("black-forest-labs/") && id.includes("flux");
+}
+
+/**
+ * Merges caller `image_config` with cost-aware defaults. OpenRouter’s documented
+ * `aspect_ratio` presets are all ~1 MP; for BFL FLUX we instead default explicit
+ * `width`/`height` (sub-megapixel) unless the caller already set aspect ratio or
+ * dimensions. If both aspect ratio and dimensions are present, aspect ratio wins
+ * (documented OpenRouter path).
+ */
+function mergeImageConfig(
+  model: string,
+  partial?: OpenRouterImageConfig
+): OpenRouterImageConfig {
+  const merged: OpenRouterImageConfig = { ...(partial ?? {}) };
+
+  const hasAspect =
+    typeof merged.aspect_ratio === "string" && merged.aspect_ratio.length > 0;
+  const hasDims =
+    merged.width != null &&
+    merged.height != null &&
+    merged.width >= FLUX_DIM_MIN &&
+    merged.height >= FLUX_DIM_MIN;
+
+  if (hasAspect && hasDims) {
+    delete merged.width;
+    delete merged.height;
+  }
+
+  if (!hasAspect && !hasDims) {
+    if (isBlackForestFluxModel(model)) {
+      const fromEnv = fluxOutputDimensionsFromEnv();
+      merged.width = fromEnv?.width ?? FLUX_DEFAULT_EDGE;
+      merged.height = fromEnv?.height ?? FLUX_DEFAULT_EDGE;
+    } else {
+      merged.aspect_ratio = "1:1";
+    }
+  }
+
+  return merged;
+}
 
 /**
  * Chat `modalities` for OpenRouter image generation. Gemini image models return
@@ -88,12 +162,7 @@ export async function generateImageWithOpenRouter(options: {
     throw new Error("Prompt must be a non-empty string");
   }
 
-  // Default 1:1 (~1 MP with OpenRouter preset sizes) unless the caller sets
-  // aspect_ratio, to keep FLUX Klein per-megapixel costs predictable and low.
-  const imageConfig: OpenRouterImageConfig = {
-    aspect_ratio: "1:1",
-    ...options.imageConfig,
-  };
+  const imageConfig = mergeImageConfig(options.model, options.imageConfig);
 
   const body: Record<string, unknown> = {
     model: options.model,
