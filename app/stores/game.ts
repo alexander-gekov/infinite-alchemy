@@ -108,6 +108,8 @@ export const useGameStore = defineStore("game", () => {
           }
         );
 
+        const onCanvas: Element[] = [];
+
         for (const element of seed) {
           const img =
             images.find((row) => row.id === element.id)?.img || "";
@@ -117,9 +119,19 @@ export const useGameStore = defineStore("game", () => {
             id: element.id,
             name: element.name,
             description: element.description,
-            position: element.position,
+            position: { ...element.position },
           });
+          onCanvas.push(full);
         }
+
+        canvasElements.value = onCanvas;
+        canvasElementsStorage.value = onCanvas.map((el) => ({
+          id: el.id,
+          name: el.name,
+          description: el.description,
+          position: { ...el.position },
+        }));
+
         gameStarted.value = true;
       } catch (error) {
         toast((error as Error).message);
