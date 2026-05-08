@@ -61,6 +61,14 @@ export const useGameStore = defineStore("game", () => {
     }
   };
 
+  const fetchRedisImages = (ids: string[]) =>
+    $fetch<{ id: string; img: string }[]>("/api/redis/get/all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: { ids },
+    });
+
   const startGame = async () => {
     isPlaying.value = true;
 
@@ -68,13 +76,18 @@ export const useGameStore = defineStore("game", () => {
 
     if (gameStarted.value) {
       try {
-        const images = await $fetch<{ id: string; img: string }[]>(
-          `/api/redis/get/all`,
-          {
-            method: "POST",
-            body: { ids: storedElements.map((el) => el.id) },
-          }
-        );
+        const storedCanvasElements = canvasElementsStorage.value || [];
+        const idSet = new Set<string>();
+        for (const el of storedElements) {
+          idSet.add(el.id);
+        }
+        for (const el of storedCanvasElements) {
+          idSet.add(el.id.split("_")[0] ?? el.id);
+        }
+        const redisIds = [...idSet];
+
+        const images =
+          redisIds.length > 0 ? await fetchRedisImages(redisIds) : [];
 
         for (const element of storedElements) {
           availableElementsSet.value.add({
@@ -82,7 +95,6 @@ export const useGameStore = defineStore("game", () => {
             img: images.find((img) => img.id === element.id)?.img || "",
           });
         }
-        const storedCanvasElements = canvasElementsStorage.value || [];
         const canvasElementsWithImages = storedCanvasElements.map((el) => {
           const elId = el.id.split("_")[0];
           const img = images.find((img) => img.id === elId)?.img || "";
@@ -100,13 +112,7 @@ export const useGameStore = defineStore("game", () => {
         const seed = INITIAL_ELEMENT_SEED.map((el) => ({ ...el }));
         const ids = seed.map((el) => el.id);
 
-        const images = await $fetch<{ id: string; img: string }[]>(
-          `/api/redis/get/all`,
-          {
-            method: "POST",
-            body: { ids },
-          }
-        );
+        const images = await fetchRedisImages(ids);
 
         const onCanvas: Element[] = [];
 

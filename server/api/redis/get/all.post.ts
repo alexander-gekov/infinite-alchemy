@@ -1,11 +1,43 @@
 import { Redis } from "@upstash/redis";
 
+function normalizeIds(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((id) => String(id).trim())
+      .filter((id) => id.length > 0);
+  }
+  return [];
+}
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
 
-  const { ids } = await readBody(event);
+  const body = await readBody<{ ids?: unknown }>(event).catch(() => null);
 
-  if (!Array.isArray(ids) || ids.length === 0) {
+  if (!body || typeof body !== "object") {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Expected a JSON object body.",
+    });
+  }
+
+  if (!("ids" in body)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Missing `ids` in JSON body (array of element id strings).",
+    });
+  }
+
+  const rawIds = body.ids;
+  if (!Array.isArray(rawIds)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "`ids` must be a JSON array.",
+    });
+  }
+
+  const ids = normalizeIds(rawIds);
+  if (ids.length === 0) {
     return [];
   }
 
@@ -22,10 +54,10 @@ export default defineEventHandler(async (event) => {
     token: config.upstashToken,
   });
 
-  const keys = ids.map((id: string) => String(id).split("_")[0]);
+  const keys = ids.map((id: string) => id.split("_")[0]);
 
   try {
-    const elements = await redis.mget(...keys);
+    const elements = await redis.mget(keys);
 
     return elements.map((element, index) => ({
       id: ids[index],
