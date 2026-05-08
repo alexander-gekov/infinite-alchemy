@@ -1,16 +1,28 @@
 <template>
-  <StartScreen v-if="!isPlaying" @play="startGame" />
+  <StartScreen
+    v-if="!isPlaying"
+    @play="startFreeplay"
+    @story-mode="startStoryMode" />
   <GameLayout v-else />
 </template>
 
 <script setup lang="ts">
 import { useGameStore } from "~/stores/game";
+import { useStoryStore } from "~/stores/story";
 
 const gameStore = useGameStore();
+const storyStore = useStoryStore();
 const { isPlaying } = storeToRefs(gameStore);
 
-const startGame = async () => {
+const startFreeplay = async () => {
   await gameStore.startGame();
+  gameStore.setGameMode("freeplay");
+};
+
+const startStoryMode = async () => {
+  await gameStore.startGame();
+  gameStore.setGameMode("story");
+  storyStore.generateStory();
 };
 </script>
 
