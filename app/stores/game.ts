@@ -1,7 +1,11 @@
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { toast } from "vue-sonner";
-import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
+import { parseRateLimitFromHeaders } from "~/lib/rateLimitHeaders";
+import {
+  INITIAL_ELEMENT_SEED,
+  STARTER_IMG_BY_ID,
+} from "~/lib/initialElements";
 
 export interface Element {
   id: string;
@@ -22,10 +26,15 @@ export interface StoredElement {
     x: number;
     y: number;
   };
+  /** Persisted image URL/data URL so resume does not require Redis for that element. */
+  img?: string;
 }
 
 export const useGameStore = defineStore("game", () => {
   const isPlaying = ref(false);
+  /** Tokens left for AI element endpoints (from response headers). */
+  const apiRateLimitRemaining = ref<number | null>(null);
+  const apiRateLimitLimit = ref<number | null>(null);
   const availableElementsSet = ref(new Set<Element>());
   const gameStarted = useCookie("gameStarted", {
     default: () => false,
@@ -40,7 +49,10 @@ export const useGameStore = defineStore("game", () => {
     [] as StoredElement[]
   );
   const canvasElements = ref<Element[]>(
-    canvasElementsStorage.value.map((el) => ({ ...el, img: "" }))
+    canvasElementsStorage.value.map((el) => ({
+      ...el,
+      img: el.img ?? "",
+    }))
   );
 
   const availableElements = computed(() =>
@@ -49,6 +61,22 @@ export const useGameStore = defineStore("game", () => {
     )
   );
 
+  const ingestRateLimitHeaders = (headers: Headers) => {
+    const parsed = parseRateLimitFromHeaders(headers);
+    if (parsed) {
+      apiRateLimitRemaining.value = parsed.remaining;
+      apiRateLimitLimit.value = parsed.limit;
+    }
+  };
+
+  const fetchRedisImages = (ids: string[]) =>
+    $fetch<{ id: string; img: string }[]>("/api/redis/get/all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: { ids },
+    });
+
   const startGame = async () => {
     isPlaying.value = true;
 
@@ -56,24 +84,61 @@ export const useGameStore = defineStore("game", () => {
 
     if (gameStarted.value) {
       try {
-        const images = await $fetch<{ id: string; img: string }[]>(
-          `/api/redis/get/all`,
-          {
-            method: "POST",
-            body: { ids: storedElements.map((el) => el.id) },
+        const storedCanvasElements = canvasElementsStorage.value || [];
+        const imageUrlById = new Map<string, string>(STARTER_IMG_BY_ID);
+
+        for (const el of storedElements) {
+          if (el.img) {
+            imageUrlById.set(el.id, el.img);
           }
-        );
+        }
+        for (const el of storedCanvasElements) {
+          if (el.img) {
+            imageUrlById.set(el.id, el.img);
+            const base = el.id.split("_")[0] ?? el.id;
+            imageUrlById.set(base, el.img);
+          }
+        }
+
+        const allBaseIds = new Set<string>();
+        for (const el of storedElements) {
+          allBaseIds.add(el.id);
+        }
+        for (const el of storedCanvasElements) {
+          allBaseIds.add(el.id.split("_")[0] ?? el.id);
+        }
+
+        const idsMissingImage = [...allBaseIds].filter((id) => {
+          const u = imageUrlById.get(id);
+          return !u || u === "";
+        });
+
+        if (idsMissingImage.length > 0) {
+          const rows = await fetchRedisImages(idsMissingImage);
+          for (const row of rows) {
+            if (row.img) {
+              imageUrlById.set(row.id, row.img);
+            }
+          }
+        }
 
         for (const element of storedElements) {
+          const img =
+            element.img ||
+            imageUrlById.get(element.id) ||
+            "";
           availableElementsSet.value.add({
             ...element,
-            img: images.find((img) => img.id === element.id)?.img || "",
+            img,
           });
         }
-        const storedCanvasElements = canvasElementsStorage.value || [];
         const canvasElementsWithImages = storedCanvasElements.map((el) => {
-          const elId = el.id.split("_")[0];
-          const img = images.find((img) => img.id === elId)?.img || "";
+          const base = el.id.split("_")[0] ?? el.id;
+          const img =
+            el.img ||
+            imageUrlById.get(el.id) ||
+            imageUrlById.get(base) ||
+            "";
           return {
             ...el,
             img,
@@ -85,32 +150,57 @@ export const useGameStore = defineStore("game", () => {
       }
     } else {
       try {
-        const promises = Array.from({ length: 2 }, () =>
-          $fetch<Omit<Element, "position">>("/api/elements/random", {
-            timeout: AI_API_TIMEOUT_MS,
-          })
-        );
+        const seed: Element[] = INITIAL_ELEMENT_SEED.map((el) => ({
+          id: el.id,
+          name: el.name,
+          description: el.description,
+          img: el.img,
+          position: { ...el.position },
+        }));
 
-        const responses = await Promise.all(promises);
-        const newElements = responses.map((response) => ({
-          ...response,
-          position: { x: 0, y: 0 },
-        })) as Element[];
+        const onCanvas: Element[] = [];
 
-        for (const element of newElements) {
+        for (const element of seed) {
           availableElementsSet.value.add(element);
           availableElementsStorage.value.push({
             id: element.id,
             name: element.name,
             description: element.description,
-            position: element.position,
+            position: { ...element.position },
+            img: element.img,
           });
+          onCanvas.push(element);
         }
+
+        canvasElements.value = onCanvas;
+        canvasElementsStorage.value = onCanvas.map((el) => ({
+          id: el.id,
+          name: el.name,
+          description: el.description,
+          position: { ...el.position },
+          img: el.img,
+        }));
+
         gameStarted.value = true;
       } catch (error) {
         toast((error as Error).message);
       }
     }
+  };
+
+  const removeAvailableElement = (elementId: string) => {
+    availableElementsSet.value = new Set(
+      [...availableElementsSet.value].filter((e) => e.id !== elementId)
+    );
+    availableElementsStorage.value = availableElementsStorage.value.filter(
+      (e) => e.id !== elementId
+    );
+    canvasElements.value = canvasElements.value.filter(
+      (e) => e.id !== elementId && !e.id.startsWith(`${elementId}_`)
+    );
+    canvasElementsStorage.value = canvasElementsStorage.value.filter(
+      (e) => e.id !== elementId && !e.id.startsWith(`${elementId}_`)
+    );
   };
 
   const addAvailableElement = async (element: Element) => {
@@ -121,6 +211,7 @@ export const useGameStore = defineStore("game", () => {
       name: element.name,
       description: element.description,
       position: element.position,
+      img: element.img,
     };
     availableElementsStorage.value = [
       ...availableElementsStorage.value,
@@ -134,6 +225,7 @@ export const useGameStore = defineStore("game", () => {
       name: element.name,
       description: element.description,
       position: element.position || { x: 0, y: 0 },
+      img: element.img,
     };
 
     canvasElements.value = [...canvasElements.value, element];
@@ -184,10 +276,14 @@ export const useGameStore = defineStore("game", () => {
 
   return {
     isPlaying,
+    apiRateLimitRemaining,
+    apiRateLimitLimit,
     availableElements,
     canvasElements,
     startGame,
+    ingestRateLimitHeaders,
     addAvailableElement,
+    removeAvailableElement,
     addCanvasElement,
     updateElementPosition,
     removeCanvasElement,

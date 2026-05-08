@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { generateImageWithOpenRouter } from "../../utils/openrouter";
-import { createApiRatelimit } from "../../utils/upstashRatelimit";
+import { enforceApiRatelimit } from "../../utils/upstashRatelimit";
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -18,17 +18,7 @@ export default defineEventHandler(async (event) => {
     token: config.upstashToken,
   });
 
-  const ratelimit = createApiRatelimit(redis);
-
-  const identifier = getRequestIP(event) || "anonymous";
-  const { success } = await ratelimit.limit(identifier);
-
-  if (!success) {
-    throw createError({
-      statusCode: 429,
-      message: "Too many requests",
-    });
-  }
+  await enforceApiRatelimit(event, redis);
 
   const { prompt } = await readBody(event);
 
