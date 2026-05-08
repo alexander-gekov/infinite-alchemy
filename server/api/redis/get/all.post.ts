@@ -1,14 +1,19 @@
 import { Redis } from "@upstash/redis";
 
-const config = useRuntimeConfig();
-
 export default defineEventHandler(async (event) => {
+  const config = useRuntimeConfig();
+
   const { ids } = await readBody(event);
 
-  if (!ids) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return [];
+  }
+
+  if (!config.upstashUrl || !config.upstashToken) {
     throw createError({
-      statusCode: 400,
-      statusMessage: "Missing ids",
+      statusCode: 503,
+      statusMessage:
+        "Redis is not configured. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.",
     });
   }
 
@@ -17,10 +22,21 @@ export default defineEventHandler(async (event) => {
     token: config.upstashToken,
   });
 
-  const elements = await redis.mget(ids.map((id: string) => id.split("_")[0]));
+  const keys = ids.map((id: string) => String(id).split("_")[0]);
 
-  return elements.map((element, index) => ({
-    id: ids[index],
-    img: element as string,
-  }));
+  try {
+    const elements = await redis.mget(...keys);
+
+    return elements.map((element, index) => ({
+      id: ids[index],
+      img: (element ?? "") as string,
+    }));
+  } catch (cause) {
+    console.error("[api/redis/get/all] mget failed:", cause);
+    throw createError({
+      statusCode: 502,
+      statusMessage: "Redis request failed",
+      cause,
+    });
+  }
 });
