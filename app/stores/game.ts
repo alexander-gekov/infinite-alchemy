@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { toast } from "vue-sonner";
 import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
+import { parseRateLimitFromHeaders } from "~/lib/rateLimitHeaders";
 
 export interface Element {
   id: string;
@@ -26,6 +27,9 @@ export interface StoredElement {
 
 export const useGameStore = defineStore("game", () => {
   const isPlaying = ref(false);
+  /** Tokens left for AI element endpoints (from response headers). */
+  const apiRateLimitRemaining = ref<number | null>(null);
+  const apiRateLimitLimit = ref<number | null>(null);
   const availableElementsSet = ref(new Set<Element>());
   const gameStarted = useCookie("gameStarted", {
     default: () => false,
@@ -48,6 +52,20 @@ export const useGameStore = defineStore("game", () => {
       a.name.localeCompare(b.name)
     )
   );
+
+  const ingestRateLimitHeaders = (headers: Headers) => {
+    const parsed = parseRateLimitFromHeaders(headers);
+    if (parsed) {
+      apiRateLimitRemaining.value = parsed.remaining;
+      apiRateLimitLimit.value = parsed.limit;
+    }
+  };
+
+  const elementFetchOptions = {
+    onResponse: ({ response }: { response: Response }) => {
+      ingestRateLimitHeaders(response.headers);
+    },
+  };
 
   const startGame = async () => {
     isPlaying.value = true;
@@ -88,6 +106,7 @@ export const useGameStore = defineStore("game", () => {
         const promises = Array.from({ length: 2 }, () =>
           $fetch<Omit<Element, "position">>("/api/elements/random", {
             timeout: AI_API_TIMEOUT_MS,
+            ...elementFetchOptions,
           })
         );
 
@@ -111,6 +130,21 @@ export const useGameStore = defineStore("game", () => {
         toast((error as Error).message);
       }
     }
+  };
+
+  const removeAvailableElement = (elementId: string) => {
+    availableElementsSet.value = new Set(
+      [...availableElementsSet.value].filter((e) => e.id !== elementId)
+    );
+    availableElementsStorage.value = availableElementsStorage.value.filter(
+      (e) => e.id !== elementId
+    );
+    canvasElements.value = canvasElements.value.filter(
+      (e) => e.id !== elementId && !e.id.startsWith(`${elementId}_`)
+    );
+    canvasElementsStorage.value = canvasElementsStorage.value.filter(
+      (e) => e.id !== elementId && !e.id.startsWith(`${elementId}_`)
+    );
   };
 
   const addAvailableElement = async (element: Element) => {
@@ -184,10 +218,14 @@ export const useGameStore = defineStore("game", () => {
 
   return {
     isPlaying,
+    apiRateLimitRemaining,
+    apiRateLimitLimit,
     availableElements,
     canvasElements,
     startGame,
+    ingestRateLimitHeaders,
     addAvailableElement,
+    removeAvailableElement,
     addCanvasElement,
     updateElementPosition,
     removeCanvasElement,

@@ -3,7 +3,7 @@ import {
   generateImageWithOpenRouter,
   openRouterJsonObjectCompletion,
 } from "../../utils/openrouter";
-import { createApiRatelimit } from "../../utils/upstashRatelimit";
+import { enforceApiRatelimit } from "../../utils/upstashRatelimit";
 
 type ElementJson = {
   name: string;
@@ -26,17 +26,7 @@ export default defineEventHandler(async (event) => {
     token: config.upstashToken,
   });
 
-  const ratelimit = createApiRatelimit(redis);
-
-  const identifier = getRequestIP(event) || "anonymous";
-  const { success } = await ratelimit.limit(identifier);
-
-  if (!success) {
-    throw createError({
-      statusCode: 429,
-      message: "Too many requests",
-    });
-  }
+  await enforceApiRatelimit(event, redis);
 
   try {
     const output = await openRouterJsonObjectCompletion<ElementJson>({

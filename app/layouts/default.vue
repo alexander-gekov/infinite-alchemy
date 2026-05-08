@@ -1,7 +1,7 @@
 <template>
   <UseScreenSafeArea top right bottom left>
     <Toaster position="top-center" />
-    <div class="min-h-screen bg-background">
+    <div class="min-h-dvh bg-background">
       <!-- <NavBar /> -->
       <main>
         <slot />
