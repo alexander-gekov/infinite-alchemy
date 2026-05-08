@@ -10,12 +10,8 @@
     </div>
     <div
       class="flex-1 bg-white relative min-w-[30%] md:min-w-[40%] md:shrink-0">
-      <!-- Story mode overlay -->
-      <StoryCanvas v-if="isStoryMode" />
-
-      <!-- Freeplay canvas -->
+      <!-- Canvas (always rendered for drag-and-drop) -->
       <div
-        v-else
         ref="canvas"
         class="absolute inset-0 bg-repeat z-10"
         :class="{ 'top-[max(0.5rem,env(safe-area-inset-top))]': !isDesktop }"
@@ -50,6 +46,9 @@
           }}</span>
         </div>
       </div>
+
+      <!-- Story mode panel (floats above canvas) -->
+      <StoryCanvas v-if="isStoryMode" />
 
       <!-- Desktop Actions -->
       <template v-if="isDesktop">

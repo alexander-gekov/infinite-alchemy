@@ -1,9 +1,10 @@
 <template>
-  <div class="absolute inset-0 z-10 flex items-center justify-center overflow-auto p-6 md:p-12">
+  <div class="absolute top-0 left-0 right-0 z-20 pointer-events-none">
+    <div class="pointer-events-auto mx-auto max-w-prose bg-white/90 backdrop-blur-sm rounded-b-xl shadow-md p-4 md:p-6 max-h-[45vh] overflow-y-auto">
     <!-- Loading state -->
     <div
       v-if="storyStore.isGenerating"
-      class="flex flex-col items-center gap-3">
+      class="flex flex-col items-center gap-3 py-4">
       <LucideLoader2 class="w-8 h-8 animate-spin text-muted-foreground" />
       <p class="text-sm text-muted-foreground italic">Crafting your story...</p>
     </div>
@@ -11,8 +12,8 @@
     <!-- No story yet -->
     <div
       v-else-if="!storyStore.story"
-      class="flex flex-col items-center gap-4 text-center">
-      <LucideBookOpen class="w-12 h-12 text-muted-foreground/40" />
+      class="flex flex-col items-center gap-3 py-4 text-center">
+      <LucideBookOpen class="w-10 h-10 text-muted-foreground/40" />
       <p class="text-sm text-muted-foreground">
         No story loaded. Generate one to begin!
       </p>
@@ -22,14 +23,14 @@
     </div>
 
     <!-- Story content -->
-    <div v-else class="max-w-prose w-full">
+    <div v-else>
       <!-- Title -->
-      <h2 class="text-xl md:text-2xl font-bold text-center mb-6 text-gray-800">
+      <h2 class="text-lg md:text-xl font-bold text-center mb-3 text-gray-800">
         {{ storyStore.story.title }}
       </h2>
 
       <!-- Story text with blanks -->
-      <div class="text-base md:text-lg leading-relaxed text-gray-700">
+      <div class="text-sm md:text-base leading-relaxed text-gray-700">
         <template
           v-for="(segment, segIdx) in storyStore.story.segments"
           :key="segIdx">
@@ -93,19 +94,19 @@
       </div>
 
       <!-- Progress -->
-      <div class="mt-6 flex items-center justify-between text-xs text-muted-foreground">
+      <div class="mt-3 flex items-center justify-between text-xs text-muted-foreground">
         <span>{{ storyStore.filledCount }} / {{ storyStore.totalBlanks }} blanks filled</span>
       </div>
 
       <!-- Completion -->
       <div
         v-if="storyStore.isComplete"
-        class="mt-8 text-center">
-        <div class="inline-flex items-center gap-2 bg-primary/10 text-primary rounded-full px-4 py-2 mb-4">
+        class="mt-4 text-center">
+        <div class="inline-flex items-center gap-2 bg-primary/10 text-primary rounded-full px-4 py-2 mb-3">
           <LucideCheckCircle class="w-5 h-5" />
           <span class="font-semibold text-sm">Story Complete!</span>
         </div>
-        <div class="flex justify-center gap-3 mt-3">
+        <div class="flex justify-center gap-3">
           <Button variant="default" size="sm" @click="handleNewStory">
             New Story
           </Button>
@@ -114,6 +115,7 @@
           </Button>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>
