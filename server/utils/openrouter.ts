@@ -2,12 +2,14 @@ const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 type OpenRouterChatResponse = {
   choices?: Array<{
+    finish_reason?: string;
     message?: {
       role?: string;
-      content?: string | null;
+      content?: string | null | unknown[];
       images?: Array<{
         type?: string;
         image_url?: { url?: string };
+        imageUrl?: { url?: string };
       }>;
     };
   }>;
@@ -67,8 +69,6 @@ export type OpenRouterImageConfig = {
 };
 
 const FLUX_DIM_MIN = 64;
-/** ~0.26 MP at 512² — below OpenRouter’s ~1 MP aspect_ratio presets for FLUX. */
-const FLUX_DEFAULT_EDGE = 512;
 
 function parseFluxDimension(raw: string | undefined): number | undefined {
   if (raw == null || raw === "") {
@@ -126,8 +126,15 @@ function mergeImageConfig(
   if (!hasAspect && !hasDims) {
     if (isBlackForestFluxModel(model)) {
       const fromEnv = fluxOutputDimensionsFromEnv();
-      merged.width = fromEnv?.width ?? FLUX_DEFAULT_EDGE;
-      merged.height = fromEnv?.height ?? FLUX_DEFAULT_EDGE;
+      if (fromEnv) {
+        merged.width = fromEnv.width;
+        merged.height = fromEnv.height;
+      } else {
+        // Rely on OpenRouter’s documented aspect_ratio presets; explicit
+        // width/height in chat `image_config` is not consistently honored and
+        // can yield an empty `message.images` for some FLUX routes.
+        merged.aspect_ratio = "1:1";
+      }
     } else {
       merged.aspect_ratio = "1:1";
     }
@@ -147,6 +154,61 @@ function openRouterImageModalities(model: string): Array<"image" | "text"> {
     return ["image", "text"];
   }
   return ["image"];
+}
+
+function urlFromImageUrlBlock(block: unknown): string | undefined {
+  if (!block || typeof block !== "object") {
+    return undefined;
+  }
+  const u = (block as Record<string, unknown>).url;
+  return typeof u === "string" && u.length > 0 ? u : undefined;
+}
+
+/**
+ * OpenRouter usually returns `message.images[].image_url.url`; some payloads use
+ * camelCase or put image parts in `content` arrays.
+ */
+function extractFirstGeneratedImageDataUrl(
+  message: unknown
+): string | undefined {
+  if (!message || typeof message !== "object") {
+    return undefined;
+  }
+  const m = message as Record<string, unknown>;
+
+  const images = m.images;
+  if (Array.isArray(images)) {
+    for (const item of images) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const img = item as Record<string, unknown>;
+      const nested = img.image_url ?? img.imageUrl;
+      const url = urlFromImageUrlBlock(nested);
+      if (url) {
+        return url;
+      }
+    }
+  }
+
+  const content = m.content;
+  if (Array.isArray(content)) {
+    for (const part of content) {
+      if (!part || typeof part !== "object") {
+        continue;
+      }
+      const p = part as Record<string, unknown>;
+      if (p.type === "image_url") {
+        const nested = p.image_url ?? p.imageUrl;
+        const url = urlFromImageUrlBlock(nested);
+        if (url) {
+          return url;
+        }
+      }
+    }
+  }
+
+  return undefined;
 }
 
 export async function generateImageWithOpenRouter(options: {
@@ -181,13 +243,17 @@ export async function generateImageWithOpenRouter(options: {
     appTitle: options.appTitle,
   });
 
-  const images = raw.choices?.[0]?.message?.images;
-  const first = images?.[0]?.image_url?.url;
-  if (!first || typeof first !== "string") {
-    throw new Error("OpenRouter returned no image in the response");
+  const choice = raw.choices?.[0];
+  const message = choice?.message;
+  const first = extractFirstGeneratedImageDataUrl(message);
+  if (!first) {
+    const fr = choice?.finish_reason ?? "unknown";
+    throw new Error(
+      `OpenRouter returned no image in the response (finish_reason: ${String(fr)})`
+    );
   }
 
-  const text = raw.choices?.[0]?.message?.content;
+  const text = message?.content;
   return {
     imageDataUrl: first,
     text: typeof text === "string" ? text : null,
