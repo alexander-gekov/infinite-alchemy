@@ -205,7 +205,7 @@
           <div
             v-if="availableElements.length === 0"
             class="flex flex-col gap-2">
-            <Skeleton v-for="i in 2" :key="i" class="w-full h-12" />
+            <Skeleton v-for="i in 4" :key="i" class="w-full h-12" />
             <p class="text-xs md:text-sm text-muted-foreground">
               Loading base elements...
             </p>

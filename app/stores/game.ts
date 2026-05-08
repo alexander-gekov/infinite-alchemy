@@ -1,8 +1,8 @@
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { toast } from "vue-sonner";
-import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
 import { parseRateLimitFromHeaders } from "~/lib/rateLimitHeaders";
+import { INITIAL_ELEMENT_SEED } from "~/lib/initialElements";
 
 export interface Element {
   id: string;
@@ -61,12 +61,6 @@ export const useGameStore = defineStore("game", () => {
     }
   };
 
-  const elementFetchOptions = {
-    onResponse: ({ response }: { response: Response }) => {
-      ingestRateLimitHeaders(response.headers);
-    },
-  };
-
   const startGame = async () => {
     isPlaying.value = true;
 
@@ -103,21 +97,22 @@ export const useGameStore = defineStore("game", () => {
       }
     } else {
       try {
-        const promises = Array.from({ length: 2 }, () =>
-          $fetch<Omit<Element, "position">>("/api/elements/random", {
-            timeout: AI_API_TIMEOUT_MS,
-            ...elementFetchOptions,
-          })
+        const seed = INITIAL_ELEMENT_SEED.map((el) => ({ ...el }));
+        const ids = seed.map((el) => el.id);
+
+        const images = await $fetch<{ id: string; img: string }[]>(
+          `/api/redis/get/all`,
+          {
+            method: "POST",
+            body: { ids },
+          }
         );
 
-        const responses = await Promise.all(promises);
-        const newElements = responses.map((response) => ({
-          ...response,
-          position: { x: 0, y: 0 },
-        })) as Element[];
-
-        for (const element of newElements) {
-          availableElementsSet.value.add(element);
+        for (const element of seed) {
+          const img =
+            images.find((row) => row.id === element.id)?.img || "";
+          const full: Element = { ...element, img };
+          availableElementsSet.value.add(full);
           availableElementsStorage.value.push({
             id: element.id,
             name: element.name,
