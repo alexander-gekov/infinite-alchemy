@@ -557,7 +557,8 @@ const combineElements = async (
     const element = await $fetch<Element>("/api/elements/combine", {
       method: "POST",
       body: {
-        prompt: `You are an average question guesser, don't try to be smart. What do you think happens when we combine ${element1.name} and ${element2.name}? Give me a real everyday noun and a description, if unsure just return a related noun.`,
+        element1: element1.name,
+        element2: element2.name,
       },
       timeout: AI_API_TIMEOUT_MS,
       retry: 1,
