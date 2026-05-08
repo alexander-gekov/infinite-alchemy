@@ -62,6 +62,19 @@ export type OpenRouterImageConfig = {
   aspect_ratio?: string;
 };
 
+/**
+ * Chat `modalities` for OpenRouter image generation. Gemini image models return
+ * both assistant text and an image; FLUX and most other image models return
+ * image only (see OpenRouter image generation docs).
+ */
+function openRouterImageModalities(model: string): Array<"image" | "text"> {
+  const id = model.toLowerCase();
+  if (id.startsWith("google/") && id.includes("image")) {
+    return ["image", "text"];
+  }
+  return ["image"];
+}
+
 export async function generateImageWithOpenRouter(options: {
   apiKey: string;
   model: string;
@@ -75,18 +88,22 @@ export async function generateImageWithOpenRouter(options: {
     throw new Error("Prompt must be a non-empty string");
   }
 
+  // Default 1:1 (~1 MP with OpenRouter preset sizes) unless the caller sets
+  // aspect_ratio, to keep FLUX Klein per-megapixel costs predictable and low.
+  const imageConfig: OpenRouterImageConfig = {
+    aspect_ratio: "1:1",
+    ...options.imageConfig,
+  };
+
   const body: Record<string, unknown> = {
     model: options.model,
     messages: [{ role: "user", content: trimmed }],
-    modalities: ["image", "text"],
+    modalities: openRouterImageModalities(options.model),
     stream: false,
   };
 
-  if (
-    options.imageConfig &&
-    Object.keys(options.imageConfig).length > 0
-  ) {
-    body.image_config = options.imageConfig;
+  if (Object.keys(imageConfig).length > 0) {
+    body.image_config = imageConfig;
   }
 
   const raw = await postOpenRouter(body, {

@@ -38,7 +38,8 @@ export default defineNuxtConfig({
     openrouterTextModel:
       process.env.OPENROUTER_TEXT_MODEL ?? "google/gemini-2.5-flash",
     openrouterImageModel:
-      process.env.OPENROUTER_IMAGE_MODEL ?? "google/gemini-2.5-flash-image",
+      process.env.OPENROUTER_IMAGE_MODEL ??
+      "black-forest-labs/flux.2-klein-4b",
     openrouterHttpReferer: process.env.OPENROUTER_HTTP_REFERER,
     openrouterAppTitle: process.env.OPENROUTER_APP_TITLE ?? "infinite-alchemy",
     appPassword: process.env.APP_PASSWORD || 'freedom',
