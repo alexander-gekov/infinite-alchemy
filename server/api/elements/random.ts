@@ -68,6 +68,17 @@ Respond with JSON only, using this exact shape: {"name":"...","description":"...
       throw new Error("Failed to generate element details");
     }
 
+    const id = output.name.toLowerCase().replace(/\s+/g, "-");
+    const cachedImg = await redis.get<string>(id);
+    if (cachedImg) {
+      return {
+        id,
+        name: output.name,
+        description: output.description,
+        img: cachedImg,
+      };
+    }
+
     const { imageDataUrl } = await generateImageWithOpenRouter({
       apiKey: config.openrouterApiKey,
       model: config.openrouterImageModel,
@@ -75,8 +86,6 @@ Respond with JSON only, using this exact shape: {"name":"...","description":"...
       referer: config.openrouterHttpReferer,
       appTitle: config.openrouterAppTitle,
     });
-
-    const id = output.name.toLowerCase().replace(/\s+/g, "-");
 
     await redis.set(id, imageDataUrl);
 

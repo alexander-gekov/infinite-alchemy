@@ -32,6 +32,17 @@ export default defineEventHandler(async (event) => {
 
   const { prompt } = await readBody(event);
 
+  const id = String(prompt).toLowerCase().replace(/\s+/g, "-");
+  const cachedImg = await redis.get<string>(id);
+  if (cachedImg) {
+    return {
+      id,
+      name: prompt || "New Element",
+      description: "",
+      img: cachedImg,
+    };
+  }
+
   try {
     const { imageDataUrl } = await generateImageWithOpenRouter({
       apiKey: config.openrouterApiKey,
@@ -40,18 +51,6 @@ export default defineEventHandler(async (event) => {
       referer: config.openrouterHttpReferer,
       appTitle: config.openrouterAppTitle,
     });
-
-    const id = String(prompt).toLowerCase().replace(/\s+/g, "-");
-
-    const existingImage = await redis.get(id);
-    if (existingImage) {
-      return {
-        id,
-        name: prompt || "New Element",
-        description: "",
-        img: existingImage,
-      };
-    }
 
     await redis.set(id, imageDataUrl);
 

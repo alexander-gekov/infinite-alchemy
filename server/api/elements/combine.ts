@@ -69,6 +69,17 @@ Respond with JSON only, using this exact shape: {"name":"...","description":"...
     name = output.name;
     description = output.description;
 
+    const id = name.toLowerCase().replace(/\s+/g, "-");
+    const cachedImg = await redis.get<string>(id);
+    if (cachedImg) {
+      return {
+        id,
+        name,
+        description,
+        img: cachedImg,
+      };
+    }
+
     const { imageDataUrl } = await generateImageWithOpenRouter({
       apiKey: config.openrouterApiKey,
       model: config.openrouterImageModel,
@@ -77,25 +88,12 @@ Respond with JSON only, using this exact shape: {"name":"...","description":"...
       appTitle: config.openrouterAppTitle,
     });
 
-    const id = name.toLowerCase().replace(/\s+/g, "-");
-
-    const existingImage = await redis.get(id);
-
-    if (existingImage) {
-      return {
-        id,
-        name: name,
-        description: description,
-        img: existingImage,
-      };
-    }
-
     await redis.set(id, imageDataUrl);
 
     return {
       id,
-      name: name,
-      description: description,
+      name,
+      description,
       img: imageDataUrl,
     };
   } catch (error) {
