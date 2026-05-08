@@ -96,9 +96,9 @@
       <!-- Rate limit indicator -->
       <div
         v-if="rateLimitRemaining !== null"
-        class="absolute bottom-16 left-4 z-20 select-none pointer-events-none md:bottom-20">
-        <span class="text-xs text-muted-foreground/40">
-          ~{{ rateLimitRemaining }} generations left
+        class="absolute bottom-20 left-4 z-20 select-none pointer-events-none md:bottom-20">
+        <span class="text-[11px] italic text-muted-foreground/60 tracking-wide">
+          {{ rateLimitRemaining }} generations remaining
         </span>
       </div>
 
@@ -239,7 +239,7 @@
                 </ContextMenuTrigger>
                 <ContextMenuContent>
                   <ContextMenuItem
-                    variant="destructive"
+                    class="text-destructive"
                     @click="gameStore.removeAvailableElement(element.id)">
                     <LucideTrash2 class="mr-2 h-4 w-4" />
                     Remove
