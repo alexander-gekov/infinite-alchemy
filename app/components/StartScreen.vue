@@ -17,6 +17,10 @@
         <LucideBookOpen class="w-4 h-4 mr-2" />
         Story Mode
       </Button>
+      <Button variant="outline" size="lg" @click="$emit('collectionMode')">
+        <LucideTrees class="w-4 h-4 mr-2" />
+        Collection Mode
+      </Button>
     </div>
 
     <p
@@ -24,19 +28,31 @@
       class="text-xs text-muted-foreground italic mt-1">
       {{ completedCount }} {{ completedCount === 1 ? 'story' : 'stories' }} completed
     </p>
+    <p
+      v-if="collectedCount > 0"
+      class="text-xs text-muted-foreground italic">
+      {{ collectedCount }} / {{ collectionTotal }} {{ collectionName }} discovered
+    </p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { LucideBookOpen } from "lucide-vue-next";
+import { LucideBookOpen, LucideTrees } from "lucide-vue-next";
 import { useStoryStore } from "~/stores/story";
+import { useCollectionStore } from "~/stores/collection";
 import logo from "~/assets/images/logo.png";
 
 defineEmits<{
   play: [];
   storyMode: [];
+  collectionMode: [];
 }>();
 
 const storyStore = useStoryStore();
 const completedCount = computed(() => storyStore.completedStories.length);
+
+const collectionStore = useCollectionStore();
+const collectedCount = computed(() => collectionStore.discoveredCount);
+const collectionTotal = computed(() => collectionStore.totalCount);
+const collectionName = computed(() => collectionStore.topic.name);
 </script>
