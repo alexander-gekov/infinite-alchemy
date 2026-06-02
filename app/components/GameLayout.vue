@@ -50,6 +50,9 @@
       <!-- Story mode panel (floats above canvas) -->
       <StoryCanvas v-if="isStoryMode" />
 
+      <!-- Collection mode pokédex (floating button + overlay) -->
+      <CollectionDex v-if="isCollectionMode" />
+
       <!-- Desktop Actions -->
       <template v-if="isDesktop">
         <NuxtLink
@@ -97,7 +100,7 @@
         </TooltipProvider>
 
         <!-- Mode toggle -->
-        <TooltipProvider>
+        <TooltipProvider v-if="!isCollectionMode">
           <Tooltip>
             <TooltipTrigger
               class="absolute bottom-28 right-6 z-50 flex items-center justify-center"
@@ -150,6 +153,7 @@
                     </Button>
                     <!-- Mobile mode toggle -->
                     <Button
+                      v-if="!isCollectionMode"
                       variant="outline"
                       size="sm"
                       class="flex items-center gap-2"
@@ -183,7 +187,7 @@
                     class="text-sm min-w-0"
                     v-model="newElementPrompt"
                     type="text"
-                    :placeholder="isStoryMode ? 'Type your guess...' : 'A dinosaur with wings...'"
+                    :placeholder="isStoryMode ? 'Type your guess...' : isCollectionMode ? 'Try making a leaf, moss, oak...' : 'A dinosaur with wings...'"
                     :disabled="isGenerating"
                     @keyup.enter="generateElement" />
                   <Button
@@ -300,6 +304,7 @@ import {
 
 import { useGameStore, type Element } from "~/stores/game";
 import { useStoryStore } from "~/stores/story";
+import { useCollectionStore } from "~/stores/collection";
 import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
 import { onStartTyping, useMediaQuery } from "@vueuse/core";
 import { toast } from "vue-sonner";
@@ -307,9 +312,21 @@ import logo from "~/assets/images/logo.png";
 
 const gameStore = useGameStore();
 const storyStore = useStoryStore();
+const collectionStore = useCollectionStore();
 const { availableElements, canvasElements, gameMode } = storeToRefs(gameStore);
 
 const isStoryMode = computed(() => gameMode.value === "story");
+const isCollectionMode = computed(() => gameMode.value === "collection");
+
+const checkCollectionDiscovery = (name: string) => {
+  if (!isCollectionMode.value) return;
+  const found = collectionStore.tryDiscover(name);
+  if (found) {
+    toast.success(
+      `New discovery: ${found.name}! (${collectionStore.discoveredCount}/${collectionStore.totalCount})`
+    );
+  }
+};
 const {
   addAvailableElement,
   addCanvasElement,
@@ -580,6 +597,8 @@ const combineElements = async (
     if (isStoryMode.value && storyStore.checkAnswer(element.name)) {
       toast.success(`Correct! "${element.name}" fills the blank.`);
     }
+
+    checkCollectionDiscovery(element.name);
   } catch (error) {
     if ((error as any).statusCode === 429) {
       toast(
@@ -693,6 +712,8 @@ const generateElement = async () => {
     if (isStoryMode.value && storyStore.checkAnswer(element.name)) {
       toast.success(`Correct! "${element.name}" fills the blank.`);
     }
+
+    checkCollectionDiscovery(element.name);
 
     newElementPrompt.value = "";
 
@@ -882,4 +903,3 @@ const handleSidebarTouchStart = (event: TouchEvent, element: any) => {
   };
 };
 </script>
-
