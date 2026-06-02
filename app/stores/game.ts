@@ -32,7 +32,7 @@ const STARTER_ELEMENTS: Omit<StoredElement, "position">[] = [
 
 const STARTER_IDS = new Set(STARTER_ELEMENTS.map((e) => e.id));
 
-export type GameMode = "freeplay" | "story";
+export type GameMode = "freeplay" | "story" | "collection";
 
 export const useGameStore = defineStore("game", () => {
   const isPlaying = ref(false);
