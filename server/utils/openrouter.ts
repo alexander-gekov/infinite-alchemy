@@ -1,18 +1,62 @@
 const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
+/**
+ * Images have their own endpoint. Image-only models (FLUX, Recraft, Seedream…)
+ * are not routable through chat completions — asking for them there fails with
+ * an opaque "Provider returned error".
+ */
+const OPENROUTER_IMAGE_URL = "https://openrouter.ai/api/v1/images";
+
+export type OpenRouterError = {
+  message?: string;
+  code?: string | number;
+  metadata?: { provider_name?: string; raw?: unknown };
+};
 
 type OpenRouterChatResponse = {
   choices?: Array<{
     message?: {
       role?: string;
       content?: string | null;
-      images?: Array<{
-        type?: string;
-        image_url?: { url?: string };
-      }>;
     };
   }>;
-  error?: { message?: string };
+  error?: OpenRouterError;
 };
+
+type OpenRouterImageResponse = {
+  data?: Array<{ b64_json?: string; media_type?: string }>;
+  error?: OpenRouterError;
+};
+
+/**
+ * OpenRouter wraps upstream failures in a generic message ("Provider returned
+ * error") and puts the useful part in `error.metadata`, so unpack all of it.
+ */
+export function openRouterErrorMessage(
+  model: unknown,
+  status: number,
+  error?: OpenRouterError
+): string {
+  const raw = error?.metadata?.raw;
+  const detail =
+    typeof raw === "string" ? raw : raw == null ? "" : JSON.stringify(raw);
+
+  return [
+    `OpenRouter request failed (HTTP ${status})`,
+    `model=${String(model)}`,
+    error?.metadata?.provider_name && `provider=${error.metadata.provider_name}`,
+    error?.message,
+    detail && `detail=${detail.slice(0, 500)}`,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+export function toDataUrl(base64: string, mediaType?: string): string {
+  if (base64.startsWith("data:")) {
+    return base64;
+  }
+  return `data:${mediaType || "image/png"};base64,${base64}`;
+}
 
 function buildHeaders(options: {
   apiKey: string;
@@ -32,166 +76,74 @@ function buildHeaders(options: {
   return headers;
 }
 
-async function postOpenRouter(
+async function postOpenRouter<T extends { error?: OpenRouterError }>(
+  url: string,
   body: Record<string, unknown>,
   headersOpts: {
     apiKey: string;
     referer?: string;
     appTitle?: string;
   }
-): Promise<OpenRouterChatResponse> {
-  const response = await fetch(OPENROUTER_CHAT_URL, {
+): Promise<T> {
+  const response = await fetch(url, {
     method: "POST",
     headers: buildHeaders(headersOpts),
     body: JSON.stringify(body),
   });
 
-  const raw = (await response.json()) as OpenRouterChatResponse;
+  const raw = (await response.json().catch(() => ({}))) as T;
 
-  if (!response.ok) {
-    const msg =
-      raw.error?.message ??
-      `OpenRouter request failed with status ${response.status}`;
-    throw new Error(msg);
+  if (!response.ok || raw.error) {
+    throw new Error(
+      openRouterErrorMessage(body.model, response.status, raw.error)
+    );
   }
 
   return raw;
-}
-
-export type OpenRouterImageConfig = {
-  aspect_ratio?: string;
-  /** Pixel width when the provider supports explicit dimensions (e.g. BFL FLUX on OpenRouter). */
-  width?: number;
-  /** Pixel height when the provider supports explicit dimensions (e.g. BFL FLUX on OpenRouter). */
-  height?: number;
-};
-
-const FLUX_DIM_MIN = 64;
-/** ~0.26 MP at 512² — below OpenRouter’s ~1 MP aspect_ratio presets for FLUX. */
-const FLUX_DEFAULT_EDGE = 512;
-
-function parseFluxDimension(raw: string | undefined): number | undefined {
-  if (raw == null || raw === "") {
-    return undefined;
-  }
-  const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || n < FLUX_DIM_MIN) {
-    return undefined;
-  }
-  return n;
-}
-
-function fluxOutputDimensionsFromEnv():
-  | { width: number; height: number }
-  | undefined {
-  const w = parseFluxDimension(process.env.OPENROUTER_FLUX_IMAGE_WIDTH);
-  const h = parseFluxDimension(process.env.OPENROUTER_FLUX_IMAGE_HEIGHT);
-  if (w != null && h != null) {
-    return { width: w, height: h };
-  }
-  return undefined;
-}
-
-function isBlackForestFluxModel(model: string): boolean {
-  const id = model.toLowerCase();
-  return id.startsWith("black-forest-labs/") && id.includes("flux");
-}
-
-/**
- * Merges caller `image_config` with cost-aware defaults. OpenRouter’s documented
- * `aspect_ratio` presets are all ~1 MP; for BFL FLUX we instead default explicit
- * `width`/`height` (sub-megapixel) unless the caller already set aspect ratio or
- * dimensions. If both aspect ratio and dimensions are present, aspect ratio wins
- * (documented OpenRouter path).
- */
-function mergeImageConfig(
-  model: string,
-  partial?: OpenRouterImageConfig
-): OpenRouterImageConfig {
-  const merged: OpenRouterImageConfig = { ...(partial ?? {}) };
-
-  const hasAspect =
-    typeof merged.aspect_ratio === "string" && merged.aspect_ratio.length > 0;
-  const hasDims =
-    merged.width != null &&
-    merged.height != null &&
-    merged.width >= FLUX_DIM_MIN &&
-    merged.height >= FLUX_DIM_MIN;
-
-  if (hasAspect && hasDims) {
-    delete merged.width;
-    delete merged.height;
-  }
-
-  if (!hasAspect && !hasDims) {
-    if (isBlackForestFluxModel(model)) {
-      const fromEnv = fluxOutputDimensionsFromEnv();
-      merged.width = fromEnv?.width ?? FLUX_DEFAULT_EDGE;
-      merged.height = fromEnv?.height ?? FLUX_DEFAULT_EDGE;
-    } else {
-      merged.aspect_ratio = "1:1";
-    }
-  }
-
-  return merged;
-}
-
-/**
- * Chat `modalities` for OpenRouter image generation. Gemini image models return
- * both assistant text and an image; FLUX and most other image models return
- * image only (see OpenRouter image generation docs).
- */
-function openRouterImageModalities(model: string): Array<"image" | "text"> {
-  const id = model.toLowerCase();
-  if (id.startsWith("google/") && id.includes("image")) {
-    return ["image", "text"];
-  }
-  return ["image"];
 }
 
 export async function generateImageWithOpenRouter(options: {
   apiKey: string;
   model: string;
   prompt: string;
-  imageConfig?: OpenRouterImageConfig;
+  /**
+   * Ratio to request. Must be one of the values the model lists in its
+   * `supported_parameters`; pass an empty string to let the provider decide
+   * (a few models, e.g. openai/gpt-5-image, reject the parameter entirely).
+   */
+  aspectRatio?: string;
   referer?: string;
   appTitle?: string;
-}): Promise<{ imageDataUrl: string; text: string | null }> {
-  const trimmed = options.prompt.trim();
-  if (!trimmed) {
+}): Promise<{ imageDataUrl: string }> {
+  const prompt = options.prompt.trim();
+  if (!prompt) {
     throw new Error("Prompt must be a non-empty string");
   }
 
-  const imageConfig = mergeImageConfig(options.model, options.imageConfig);
-
-  const body: Record<string, unknown> = {
-    model: options.model,
-    messages: [{ role: "user", content: trimmed }],
-    modalities: openRouterImageModalities(options.model),
-    stream: false,
-  };
-
-  if (Object.keys(imageConfig).length > 0) {
-    body.image_config = imageConfig;
+  const aspectRatio = options.aspectRatio ?? "1:1";
+  const body: Record<string, unknown> = { model: options.model, prompt };
+  if (aspectRatio) {
+    body.aspect_ratio = aspectRatio;
   }
 
-  const raw = await postOpenRouter(body, {
-    apiKey: options.apiKey,
-    referer: options.referer,
-    appTitle: options.appTitle,
-  });
+  const raw = await postOpenRouter<OpenRouterImageResponse>(
+    OPENROUTER_IMAGE_URL,
+    body,
+    {
+      apiKey: options.apiKey,
+      referer: options.referer,
+      appTitle: options.appTitle,
+    }
+  );
 
-  const images = raw.choices?.[0]?.message?.images;
-  const first = images?.[0]?.image_url?.url;
-  if (!first || typeof first !== "string") {
-    throw new Error("OpenRouter returned no image in the response");
+  const image = raw.data?.[0];
+  if (!image?.b64_json) {
+    throw new Error(
+      `OpenRouter returned no image for model ${options.model}. Check that it is listed at https://openrouter.ai/api/v1/images/models`
+    );
   }
 
-  const text = raw.choices?.[0]?.message?.content;
-  return {
-    imageDataUrl: first,
-    text: typeof text === "string" ? text : null,
-  };
+  return { imageDataUrl: toDataUrl(image.b64_json, image.media_type) };
 }
 
 export async function openRouterJsonObjectCompletion<T>(options: {
@@ -225,11 +177,15 @@ export async function openRouterJsonObjectCompletion<T>(options: {
     body.presence_penalty = options.presencePenalty;
   }
 
-  const raw = await postOpenRouter(body, {
-    apiKey: options.apiKey,
-    referer: options.referer,
-    appTitle: options.appTitle,
-  });
+  const raw = await postOpenRouter<OpenRouterChatResponse>(
+    OPENROUTER_CHAT_URL,
+    body,
+    {
+      apiKey: options.apiKey,
+      referer: options.referer,
+      appTitle: options.appTitle,
+    }
+  );
 
   const content = raw.choices?.[0]?.message?.content;
   if (!content || typeof content !== "string") {

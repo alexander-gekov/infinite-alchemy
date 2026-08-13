@@ -48,6 +48,7 @@ export default defineEventHandler(async (event) => {
     const { imageDataUrl } = await generateImageWithOpenRouter({
       apiKey: config.openrouterApiKey,
       model: config.openrouterImageModel,
+      aspectRatio: config.openrouterImageAspectRatio,
       prompt: `shiny 3D illustration of ${prompt}, minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
       referer: config.openrouterHttpReferer,
       appTitle: config.openrouterAppTitle,
