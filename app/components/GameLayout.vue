@@ -14,25 +14,16 @@
       <div
         ref="canvas"
         class="absolute inset-0 bg-repeat z-10"
-        :class="{ 'top-[max(0.5rem,env(safe-area-inset-top))]': !isDesktop }"
-        @dragover.prevent
-        @drop="handleDrop"
-        @touchmove.prevent="handleTouchMove"
-        @touchend.prevent="handleTouchEnd">
+        :class="{ 'top-[max(0.5rem,env(safe-area-inset-top))]': !isDesktop }">
         <!-- Canvas Elements -->
         <div
           v-for="element in canvasElements"
           :key="element.id"
-          class="absolute cursor-move z-10"
-          :style="{
-            left: `${element.position?.x || 0}px`,
-            top: `${element.position?.y || 0}px`,
-          }"
-          draggable="true"
-          @dragstart="handleDragStart($event, element)"
-          @dragend="handleDragEnd($event, element)"
-          @touchstart.prevent="handleTouchStart($event, element)"
-          @dblclick="handleDuplicate(element)">
+          :data-id="element.id"
+          class="absolute top-0 left-0 cursor-move touch-none select-none"
+          :class="draggingId === element.id ? 'z-20' : 'z-10'"
+          :style="{ transform: transformFor(element) }"
+          @pointerdown="handlePointerDown($event, element)">
           <img
             :src="element.img || logo"
             :alt="element.name"
@@ -77,7 +68,7 @@
               as-child>
               <LucideRecycle
                 class="w-fit cursor-pointer text-muted-foreground hover:text-primary"
-                @click="gameStore.clearCanvas" />
+                @click="clearCanvas" />
             </TooltipTrigger>
             <TooltipContent>
               <p>Clear canvas</p>
@@ -91,10 +82,26 @@
               as-child>
               <LucidePower
                 class="w-fit cursor-pointer text-muted-foreground hover:text-primary"
-                @click="gameStore.resetGame" />
+                @click="resetGame" />
             </TooltipTrigger>
             <TooltipContent>
               <p>Reset game</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger
+              class="absolute bottom-38 right-6 z-50 flex items-center justify-center"
+              as-child>
+              <component
+                :is="soundMuted ? LucideVolumeX : LucideVolume2"
+                class="w-fit cursor-pointer text-muted-foreground hover:text-primary"
+                @click="toggleMuted" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{{ soundMuted ? "Unmute sounds" : "Mute sounds" }}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -141,14 +148,14 @@
                       variant="outline"
                       size="sm"
                       class="flex items-center gap-2"
-                      @click="gameStore.clearCanvas">
+                      @click="clearCanvas">
                       <LucideRecycle class="h-4 w-4" />
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       class="flex items-center gap-2"
-                      @click="gameStore.resetGame">
+                      @click="resetGame">
                       <LucidePower class="h-4 w-4" />
                     </Button>
                     <!-- Mobile mode toggle -->
@@ -160,6 +167,16 @@
                       @click="toggleGameMode">
                       <component
                         :is="isStoryMode ? LucideGamepad2 : LucideBookOpen"
+                        class="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="flex items-center gap-2"
+                      :aria-label="soundMuted ? 'Unmute sounds' : 'Mute sounds'"
+                      @click="toggleMuted">
+                      <component
+                        :is="soundMuted ? LucideVolumeX : LucideVolume2"
                         class="h-4 w-4" />
                     </Button>
                   </div>
@@ -259,13 +276,9 @@
                     <img
                       :src="element.img || logo"
                       :alt="element.name"
-                      draggable="true"
-                      @dragstart="handleSidebarDragStart($event, element, true)"
-                      @dragend="handleSidebarDragEnd($event)"
-                      @touchstart.prevent="handleSidebarTouchStart($event, element)"
-                      @touchmove.prevent="handleTouchMove"
-                      @touchend.prevent="handleTouchEnd"
-                      class="w-10 h-10 md:w-12 md:h-12 rounded-full cursor-move" />
+                      draggable="false"
+                      @pointerdown="handleSidebarPointerDown($event, element)"
+                      class="w-10 h-10 md:w-12 md:h-12 rounded-full cursor-move touch-none select-none" />
                     <span
                       class="text-xs md:text-sm text-gray-600 touch-none select-none"
                       >{{ element.name }}</span
@@ -300,6 +313,8 @@ import {
   LucideTrash2,
   LucideBookOpen,
   LucideGamepad2,
+  LucideVolume2,
+  LucideVolumeX,
 } from "lucide-vue-next";
 
 import { useGameStore, type Element } from "~/stores/game";
@@ -309,6 +324,15 @@ import { AI_API_TIMEOUT_MS } from "~/lib/aiApi";
 import { onStartTyping, useMediaQuery } from "@vueuse/core";
 import { toast } from "vue-sonner";
 import logo from "~/assets/images/logo.png";
+import { clampToCanvas, isOutside, overlaps, type Point } from "~/lib/drag";
+
+/** Rendered size of a canvas element, in px (w-22). */
+const ELEMENT_SIZE = 88;
+/** Max delay between two taps/clicks to count as a double tap, in ms. */
+const DOUBLE_TAP_MS = 300;
+
+const sfx = useSfx();
+const { muted: soundMuted, toggleMuted } = sfx;
 
 const gameStore = useGameStore();
 const storyStore = useStoryStore();
@@ -322,6 +346,7 @@ const checkCollectionDiscovery = (name: string) => {
   if (!isCollectionMode.value) return;
   const found = collectionStore.tryDiscover(name);
   if (found) {
+    sfx.discover();
     toast.success(
       `New discovery: ${found.name}! (${collectionStore.discoveredCount}/${collectionStore.totalCount})`
     );
@@ -352,9 +377,19 @@ onMounted(() => {
 
 const canvas = ref<HTMLElement | null>(null);
 const elementsContainer = ref<HTMLElement | null>(null);
-const draggedElement = ref<any>(null);
-const dragOffset = ref({ x: 0, y: 0 });
-const elementBeingDraggedOver = ref<any>(null);
+// Deliberately not reactive: the drag is painted imperatively for smoothness,
+// only `draggingId` needs to reach the template.
+let drag: {
+  element: Element;
+  /** Canvas-relative position of the element while it is being dragged. */
+  position: Point;
+  /** Distance between the pointer and the element's top-left corner. */
+  offset: Point;
+  moved: boolean;
+} | null = null;
+let dragNode: HTMLElement | null = null;
+const draggingId = ref<string | null>(null);
+const elementBeingDraggedOver = ref<Element | null>(null);
 const newElementPrompt = ref("");
 const isCombining = ref(false);
 const isGenerating = ref(false);
@@ -406,162 +441,155 @@ const scrollToLetter = (letter: string) => {
   }
 };
 
+const clearCanvas = () => {
+  sfx.discard();
+  gameStore.clearCanvas();
+};
+
+const resetGame = () => {
+  sfx.discard();
+  gameStore.resetGame();
+};
+
 const scrollToBottom = () => {
   if (elementsContainer.value) {
     elementsContainer.value.scrollTop = elementsContainer.value.scrollHeight;
   }
 };
 
-const createDragPreview = (element: HTMLElement) => {
-  const clone = element.cloneNode(true) as HTMLElement;
-  clone.style.transform = "translateY(-9999px)";
-  clone.style.position = "fixed";
-  clone.style.top = "0";
-  clone.style.left = "0";
-  clone.style.margin = "0";
-  clone.style.boxShadow = "none";
-  clone.style.backdropFilter = "none";
-  document.body.appendChild(clone);
-  return clone;
+const transformFor = (element: Element) => {
+  const { x, y } = element.position ?? { x: 0, y: 0 };
+  return `translate3d(${x}px, ${y}px, 0)`;
 };
 
-const handleSidebarDragStart = (
-  event: DragEvent,
-  element: any,
-  showSource: boolean = false
+// The gesture bypasses Vue and writes the transform straight to the node, so a
+// pointermove never re-renders the (large) canvas + sidebar tree.
+const paint = (position: Point, dragging: boolean) => {
+  if (!dragNode) return;
+  dragNode.style.transform = `translate3d(${position.x}px, ${position.y}px, 0)${
+    dragging ? " scale(1.05)" : ""
+  }`;
+  dragNode.style.willChange = dragging ? "transform" : "";
+};
+
+const startDrag = (
+  element: Element,
+  node: HTMLElement | null,
+  position: Point,
+  offset: Point
 ) => {
-  if (!event.dataTransfer) return;
-
-  draggedElement.value = {
-    ...element,
-    id: element.id + "_" + Date.now(),
-  };
-
-  const preview = createDragPreview(event.target as HTMLElement);
-  event.dataTransfer.setDragImage(preview, 0, 0);
-  event.dataTransfer.effectAllowed = "move";
-
-  setTimeout(() => {
-    if (!showSource) {
-      (event.target as HTMLElement).style.opacity = "0";
-      document.body.removeChild(preview);
-    }
-  }, 0);
-
-  dragOffset.value = {
-    x: 25,
-    y: 25,
-  };
-};
-
-const handleSidebarDragEnd = (event: DragEvent) => {
-  (event.target as HTMLElement).style.opacity = "1";
-};
-
-const checkElementOverlap = (element1: any, element2: any) => {
-  const rect1 = {
-    left: element1.position.x,
-    right: element1.position.x + 64, // width of the element (w-16 = 64px)
-    top: element1.position.y,
-    bottom: element1.position.y + 64,
-  };
-
-  const rect2 = {
-    left: element2.position.x,
-    right: element2.position.x + 64,
-    top: element2.position.y,
-    bottom: element2.position.y + 64,
-  };
-
-  return !(
-    rect1.right < rect2.left ||
-    rect1.left > rect2.right ||
-    rect1.bottom < rect2.top ||
-    rect1.top > rect2.bottom
-  );
-};
-
-const handleDragStart = (event: DragEvent, element: any) => {
-  if (!event.dataTransfer) return;
-
-  draggedElement.value = element;
+  drag = { element, position, offset, moved: false };
+  dragNode = node;
+  draggingId.value = element.id;
   elementBeingDraggedOver.value = null;
-
-  const preview = createDragPreview(event.target as HTMLElement);
-  event.dataTransfer.setDragImage(preview, 25, 25);
-  event.dataTransfer.effectAllowed = "move";
-
-  setTimeout(() => {
-    (event.target as HTMLElement).style.opacity = "0";
-    document.body.removeChild(preview);
-  }, 0);
-
-  dragOffset.value = {
-    x: 25,
-    y: 25,
-  };
-
-  // Add dragover event listener to track element being dragged over
-  window.addEventListener("dragover", handleElementDragOver);
+  paint(position, true);
+  window.addEventListener("pointermove", handlePointerMove);
+  window.addEventListener("pointerup", handlePointerUp);
+  window.addEventListener("pointercancel", handlePointerUp);
+  sfx.pickup();
 };
 
-const handleElementDragOver = (event: DragEvent) => {
-  if (!canvas.value || !draggedElement.value) return;
+const handlePointerDown = (event: PointerEvent, element: Element) => {
+  if (event.button !== 0 || !canvas.value) return;
 
-  const canvasRect = canvas.value.getBoundingClientRect();
-  const x = event.clientX - canvasRect.left - dragOffset.value.x;
-  const y = event.clientY - canvasRect.top - dragOffset.value.y;
-
-  const testElement = {
-    ...draggedElement.value,
-    position: { x, y },
-  };
-
-  const targetElement = canvasElements.value.find(
-    (e) =>
-      e.id !== draggedElement.value.id && checkElementOverlap(testElement, e)
-  );
-
-  elementBeingDraggedOver.value = targetElement;
-  elementBeingDraggedOver.value.style.opacity = "0.8";
-};
-
-const handleDragEnd = (event: DragEvent, element: any) => {
-  (event.target as HTMLElement).style.opacity = "1";
-  window.removeEventListener("dragover", handleElementDragOver);
-
-  if (!canvas.value) return;
-
-  const canvasRect = canvas.value.getBoundingClientRect();
-  const isOutsideCanvas =
-    event.clientX < canvasRect.left ||
-    event.clientX > canvasRect.right ||
-    event.clientY < canvasRect.top ||
-    event.clientY > canvasRect.bottom;
-
-  if (isOutsideCanvas) {
-    removeCanvasElement(element.id);
-    draggedElement.value = null;
-    elementBeingDraggedOver.value = null;
+  // A second tap/click on the same element duplicates it instead of dragging.
+  if (isSecondTap(element.id)) {
+    handleDuplicate(element);
     return;
   }
 
-  // Update element position
-  const x = event.clientX - canvasRect.left - dragOffset.value.x;
-  const y = event.clientY - canvasRect.top - dragOffset.value.y;
-
-  // Keep element within canvas bounds
-  const boundedX = Math.max(0, Math.min(x, canvasRect.width - 48));
-  const boundedY = Math.max(0, Math.min(y, canvasRect.height - 48));
-
-  updateElementPosition(element.id, {
-    x: boundedX,
-    y: boundedY,
+  const canvasRect = canvas.value.getBoundingClientRect();
+  const position = element.position ?? { x: 0, y: 0 };
+  startDrag(element, event.currentTarget as HTMLElement, position, {
+    x: event.clientX - canvasRect.left - position.x,
+    y: event.clientY - canvasRect.top - position.y,
   });
-
-  draggedElement.value = null;
-  elementBeingDraggedOver.value = null;
 };
+
+const handleSidebarPointerDown = (event: PointerEvent, element: Element) => {
+  if (event.button !== 0 || !canvas.value) return;
+
+  const canvasRect = canvas.value.getBoundingClientRect();
+  // New elements are grabbed by their centre so they sit under the pointer.
+  const offset = { x: ELEMENT_SIZE / 2, y: ELEMENT_SIZE / 2 };
+  const position = clampToCanvas(
+    {
+      x: event.clientX - canvasRect.left - offset.x,
+      y: event.clientY - canvasRect.top - offset.y,
+    },
+    canvasRect
+  );
+
+  const instance = { ...element, id: `${element.id}_${Date.now()}`, position };
+  addCanvasElement(instance);
+  startDrag(instance, null, position, offset);
+
+  // The canvas node for a brand new element only exists after the next render.
+  nextTick(() => {
+    if (drag?.element.id !== instance.id) return;
+    dragNode = canvas.value?.querySelector(`[data-id="${instance.id}"]`) ?? null;
+    paint(drag.position, true);
+  });
+};
+
+const handlePointerMove = (event: PointerEvent) => {
+  if (!drag || !canvas.value) return;
+
+  const canvasRect = canvas.value.getBoundingClientRect();
+  drag.position = clampToCanvas(
+    {
+      x: event.clientX - canvasRect.left - drag.offset.x,
+      y: event.clientY - canvasRect.top - drag.offset.y,
+    },
+    canvasRect
+  );
+  drag.moved = true;
+  paint(drag.position, true);
+
+  const current = drag;
+  elementBeingDraggedOver.value =
+    canvasElements.value.find(
+      (e) =>
+        e.id !== current.element.id &&
+        overlaps(current.position, e.position ?? { x: 0, y: 0 })
+    ) ?? null;
+};
+
+const stopListening = () => {
+  window.removeEventListener("pointermove", handlePointerMove);
+  window.removeEventListener("pointerup", handlePointerUp);
+  window.removeEventListener("pointercancel", handlePointerUp);
+};
+
+const handlePointerUp = async (event: PointerEvent) => {
+  const current = drag;
+  const target = elementBeingDraggedOver.value;
+  stopListening();
+  paint(current?.position ?? { x: 0, y: 0 }, false);
+  drag = null;
+  dragNode = null;
+  draggingId.value = null;
+  elementBeingDraggedOver.value = null;
+
+  if (!current || !canvas.value) return;
+
+  const dropPoint = { x: event.clientX, y: event.clientY };
+  if (isOutside(dropPoint, canvas.value.getBoundingClientRect())) {
+    removeCanvasElement(current.element.id);
+    sfx.discard();
+    return;
+  }
+
+  updateElementPosition(current.element.id, current.position);
+
+  if (target) {
+    await combineElements(current.element, target, current.position);
+  } else if (current.moved) {
+    sfx.drop();
+  }
+};
+
+onBeforeUnmount(stopListening);
 
 const combineElements = async (
   element1: Element,
@@ -593,6 +621,7 @@ const combineElements = async (
 
     removeCanvasElement(element1.id);
     removeCanvasElement(element2.id);
+    sfx.combine();
 
     if (isStoryMode.value && storyStore.checkAnswer(element.name)) {
       toast.success(`Correct! "${element.name}" fills the blank.`);
@@ -600,6 +629,7 @@ const combineElements = async (
 
     checkCollectionDiscovery(element.name);
   } catch (error) {
+    sfx.error();
     if ((error as any).statusCode === 429) {
       toast(
         "You've reached the limit. Please wait a few minutes before generating more elements."
@@ -613,81 +643,27 @@ const combineElements = async (
   }
 };
 
-const handleDrop = async (event: DragEvent) => {
-  event.preventDefault();
-  if (!canvas.value || !draggedElement.value) return;
+const lastTap = ref({ id: "", time: 0 });
 
-  const canvasRect = canvas.value.getBoundingClientRect();
-  const isOutsideCanvas =
-    event.clientX < canvasRect.left ||
-    event.clientX > canvasRect.right ||
-    event.clientY < canvasRect.top ||
-    event.clientY > canvasRect.bottom;
-
-  if (isOutsideCanvas) {
-    if (draggedElement.value.id) {
-      removeCanvasElement(draggedElement.value.id);
-    }
-    draggedElement.value = null;
-    elementBeingDraggedOver.value = null;
-    return;
-  }
-
-  const x = event.clientX - canvasRect.left - dragOffset.value.x;
-  const y = event.clientY - canvasRect.top - dragOffset.value.y;
-
-  // Keep element within canvas bounds
-  const boundedX = Math.max(0, Math.min(x, canvasRect.width - 48));
-  const boundedY = Math.max(0, Math.min(y, canvasRect.height - 48));
-
-  const testElement = {
-    ...draggedElement.value,
-    position: { x: boundedX, y: boundedY },
-  };
-
-  const targetElement = canvasElements.value.find(
-    (e) =>
-      e.id !== draggedElement.value.id && checkElementOverlap(testElement, e)
-  );
-
-  if (targetElement) {
-    await combineElements(draggedElement.value, targetElement, {
-      x: boundedX,
-      y: boundedY,
-    });
-  } else {
-    // If it's a new element from sidebar
-    if (
-      !gameStore.canvasElements.find((e) => e.id === draggedElement.value.id)
-    ) {
-      addCanvasElement({
-        ...draggedElement.value,
-        position: { x: boundedX, y: boundedY },
-      });
-    } else {
-      // Update existing element position
-      updateElementPosition(draggedElement.value.id, {
-        x: boundedX,
-        y: boundedY,
-      });
-    }
-  }
-
-  draggedElement.value = null;
-  elementBeingDraggedOver.value = null;
+const isSecondTap = (id: string) => {
+  const now = Date.now();
+  const isRepeat = lastTap.value.id === id && now - lastTap.value.time < DOUBLE_TAP_MS;
+  lastTap.value = { id, time: isRepeat ? 0 : now };
+  return isRepeat;
 };
 
-const handleDuplicate = (element: any) => {
+const handleDuplicate = (element: Element) => {
   const offset = 20; // Offset for the duplicated element
-  const newElement = {
+  const position = element.position ?? { x: 0, y: 0 };
+  addCanvasElement({
     ...element,
     id: element.id + "_" + Date.now(),
     position: {
-      x: element.position.x + offset,
-      y: element.position.y + offset,
+      x: position.x + offset,
+      y: position.y + offset,
     },
-  };
-  addCanvasElement(newElement);
+  });
+  sfx.pickup();
 };
 
 const generateElement = async () => {
@@ -708,6 +684,7 @@ const generateElement = async () => {
       ...element,
       position: isDesktop.value ? { x: 100, y: 100 } : { x: 50, y: 50 },
     });
+    sfx.combine();
 
     if (isStoryMode.value && storyStore.checkAnswer(element.name)) {
       toast.success(`Correct! "${element.name}" fills the blank.`);
@@ -734,172 +711,4 @@ const generateElement = async () => {
   }
 };
 
-const lastTapTime = ref(0);
-const doubleTapDelay = 300; // milliseconds
-
-const touchStartPosition = ref({ x: 0, y: 0 });
-const touchedElement = ref<any>(null);
-const initialElementPosition = ref({ x: 0, y: 0 });
-
-const handleTouchStart = (event: TouchEvent, element: any) => {
-  const touch = event.touches[0];
-  if (!touch) return;
-
-  const currentTime = new Date().getTime();
-  const tapLength = currentTime - lastTapTime.value;
-
-  if (tapLength < doubleTapDelay && tapLength > 0) {
-    // Double tap detected
-    event.preventDefault();
-    handleDuplicate(element);
-    lastTapTime.value = 0;
-  } else {
-    lastTapTime.value = currentTime;
-
-    touchStartPosition.value = {
-      x: touch.clientX,
-      y: touch.clientY,
-    };
-    touchedElement.value = element;
-    initialElementPosition.value = {
-      x: element.position.x,
-      y: element.position.y,
-    };
-  }
-};
-
-const handleTouchMove = (event: TouchEvent) => {
-  if (!touchedElement.value || !canvas.value) return;
-
-  const touch = event.touches[0];
-  if (!touch) return;
-
-  const canvasRect = canvas.value.getBoundingClientRect();
-
-  // For elements from sidebar, we need to handle the initial position
-  if (
-    initialElementPosition.value.x === 0 &&
-    initialElementPosition.value.y === 0
-  ) {
-    const boundedX = Math.max(
-      0,
-      Math.min(touch.clientX - canvasRect.left - 25, canvasRect.width - 48)
-    );
-    const boundedY = Math.max(
-      0,
-      Math.min(touch.clientY - canvasRect.top - 25, canvasRect.height - 48)
-    );
-
-    updateElementPosition(touchedElement.value.id, {
-      x: boundedX,
-      y: boundedY,
-    });
-    return;
-  }
-
-  const deltaX = touch.clientX - touchStartPosition.value.x;
-  const deltaY = touch.clientY - touchStartPosition.value.y;
-
-  const newX = initialElementPosition.value.x + deltaX;
-  const newY = initialElementPosition.value.y + deltaY;
-
-  // Keep element within canvas bounds
-  const boundedX = Math.max(0, Math.min(newX, canvasRect.width - 48));
-  const boundedY = Math.max(0, Math.min(newY, canvasRect.height - 48));
-
-  updateElementPosition(touchedElement.value.id, {
-    x: boundedX,
-    y: boundedY,
-  });
-
-  // Check for overlapping elements
-  const testElement = {
-    ...touchedElement.value,
-    position: { x: boundedX, y: boundedY },
-  };
-
-  const targetElement = canvasElements.value.find(
-    (e) =>
-      e.id !== touchedElement.value.id && checkElementOverlap(testElement, e)
-  );
-
-  elementBeingDraggedOver.value = targetElement;
-  if (targetElement) {
-    elementBeingDraggedOver.value.style.opacity = "0.8";
-  }
-};
-
-const handleTouchEnd = async (event: TouchEvent) => {
-  if (!touchedElement.value || !canvas.value) return;
-
-  const touch = event.changedTouches[0];
-  if (!touch) return;
-
-  const canvasRect = canvas.value.getBoundingClientRect();
-
-  const isOutsideCanvas =
-    touch.clientX < canvasRect.left ||
-    touch.clientX > canvasRect.right ||
-    touch.clientY < canvasRect.top ||
-    touch.clientY > canvasRect.bottom;
-
-  if (isOutsideCanvas) {
-    removeCanvasElement(touchedElement.value.id);
-  } else if (elementBeingDraggedOver.value) {
-    const position = {
-      x: touchedElement.value.position.x,
-      y: touchedElement.value.position.y,
-    };
-    await combineElements(
-      touchedElement.value,
-      elementBeingDraggedOver.value,
-      position
-    );
-  } else {
-    // Add new element from sidebar if it doesn't exist on canvas
-    if (
-      !gameStore.canvasElements.find((e) => e.id === touchedElement.value.id)
-    ) {
-      const boundedX = Math.max(
-        0,
-        Math.min(touch.clientX - canvasRect.left - 25, canvasRect.width - 48)
-      );
-      const boundedY = Math.max(
-        0,
-        Math.min(touch.clientY - canvasRect.top - 25, canvasRect.height - 48)
-      );
-
-      addCanvasElement({
-        ...touchedElement.value,
-        position: { x: boundedX, y: boundedY },
-      });
-    }
-  }
-
-  touchedElement.value = null;
-  elementBeingDraggedOver.value = null;
-  touchStartPosition.value = { x: 0, y: 0 };
-  initialElementPosition.value = { x: 0, y: 0 };
-};
-
-const handleSidebarTouchStart = (event: TouchEvent, element: any) => {
-  const touch = event.touches[0];
-  if (!touch) return;
-
-  // Create a new instance of the element for the canvas
-  const newElement = {
-    ...element,
-    id: element.id + "_" + Date.now(),
-  };
-
-  touchedElement.value = newElement;
-  touchStartPosition.value = {
-    x: touch.clientX,
-    y: touch.clientY,
-  };
-  initialElementPosition.value = {
-    x: 0,
-    y: 0,
-  };
-};
 </script>

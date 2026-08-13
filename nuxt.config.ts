@@ -40,6 +40,9 @@ export default defineNuxtConfig({
     openrouterImageModel:
       process.env.OPENROUTER_IMAGE_MODEL ??
       "black-forest-labs/flux.2-klein-4b",
+    // Empty string = don't send the parameter (some image models reject it).
+    openrouterImageAspectRatio:
+      process.env.OPENROUTER_IMAGE_ASPECT_RATIO ?? "1:1",
     openrouterHttpReferer: process.env.OPENROUTER_HTTP_REFERER,
     openrouterAppTitle: process.env.OPENROUTER_APP_TITLE ?? "infinite-alchemy",
     appPassword: process.env.APP_PASSWORD || 'freedom',

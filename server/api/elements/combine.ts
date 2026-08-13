@@ -185,6 +185,7 @@ Respond with JSON only: {"name":"...","description":"..."}
     const { imageDataUrl } = await generateImageWithOpenRouter({
       apiKey: config.openrouterApiKey,
       model: config.openrouterImageModel,
+      aspectRatio: config.openrouterImageAspectRatio,
       prompt: `claymorphic 3D illustration of ${name} (${description}), minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution. Avoid clay texture, excessive complexity, or photorealism.`,
       referer: config.openrouterHttpReferer,
       appTitle: config.openrouterAppTitle,
