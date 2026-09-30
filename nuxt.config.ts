@@ -39,7 +39,7 @@ export default defineNuxtConfig({
       process.env.OPENROUTER_TEXT_MODEL ?? "google/gemini-2.5-flash",
     openrouterImageModel:
       process.env.OPENROUTER_IMAGE_MODEL ??
-      "black-forest-labs/flux.2-klein-4b",
+      "recraft/recraft-v4.1-flash",
     // Empty string = don't send the parameter (some image models reject it).
     openrouterImageAspectRatio:
       process.env.OPENROUTER_IMAGE_ASPECT_RATIO ?? "1:1",

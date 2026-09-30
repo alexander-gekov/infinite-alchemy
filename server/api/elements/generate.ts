@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { elementImagePrompt } from "../../utils/elementImagePrompt";
 import { generateImageWithOpenRouter } from "../../utils/openrouter";
 import { createApiRatelimit } from "../../utils/upstashRatelimit";
 import { getRateLimitIdentifier } from "../../utils/rateLimitIdentity";
@@ -49,7 +50,7 @@ export default defineEventHandler(async (event) => {
       apiKey: config.openrouterApiKey,
       model: config.openrouterImageModel,
       aspectRatio: config.openrouterImageAspectRatio,
-      prompt: `shiny 3D illustration of ${prompt}, minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution`,
+      prompt: elementImagePrompt(String(prompt)),
       referer: config.openrouterHttpReferer,
       appTitle: config.openrouterAppTitle,
     });
