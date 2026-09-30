@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { elementImagePrompt } from "../../utils/elementImagePrompt";
 import {
   generateImageWithOpenRouter,
   openRouterJsonObjectCompletion,
@@ -186,7 +187,7 @@ Respond with JSON only: {"name":"...","description":"..."}
       apiKey: config.openrouterApiKey,
       model: config.openrouterImageModel,
       aspectRatio: config.openrouterImageAspectRatio,
-      prompt: `claymorphic 3D illustration of ${name} (${description}), minimalistic design, smooth surfaces, bright colors, centered, white background, no shadows, high contrast, logo style, flat lighting, high resolution. Avoid clay texture, excessive complexity, or photorealism.`,
+      prompt: elementImagePrompt(name, description),
       referer: config.openrouterHttpReferer,
       appTitle: config.openrouterAppTitle,
     });
